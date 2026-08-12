@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 Offset = tuple[int, int]
+
+
+class Neighborhood(Protocol):
+    """Structural protocol for a raster CA neighborhood."""
+
+    def offsets(self) -> tuple[Offset, ...]:
+        """Return relative neighbor offsets, excluding the center cell."""
+        ...
 
 
 def _validate_radius(radius: int) -> None:
