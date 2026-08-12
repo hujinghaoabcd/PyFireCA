@@ -46,6 +46,37 @@ class ConstantDirectionalSpreadRate:
         return self.rate_m_s
 
 
+def _validate_direct_neighbor_offsets(neighborhood: Neighborhood) -> None:
+    """Reject long-range edges until intermediate-cell semantics are explicit.
+
+    The current physical arrival solver treats each neighborhood offset as one
+    direct center-to-center edge. An offset beyond the immediate 3x3 stencil
+    could otherwise jump across intermediate ``UNBURNABLE`` cells. Extended
+    neighborhoods therefore need a separately designed path/intersection rule
+    before they are valid physical-arrival edges.
+    """
+
+    if not hasattr(neighborhood, "offsets"):
+        raise TypeError("neighborhood must implement offsets()")
+    for offset in neighborhood.offsets():
+        if (
+            not isinstance(offset, tuple)
+            or len(offset) != 2
+            or isinstance(offset[0], bool)
+            or isinstance(offset[1], bool)
+            or not isinstance(offset[0], int)
+            or not isinstance(offset[1], int)
+        ):
+            raise TypeError("neighborhood offsets must be two-integer (drow, dcol) tuples")
+        if offset == (0, 0):
+            raise ValueError("neighborhood must not include the center offset (0, 0)")
+        if max(abs(offset[0]), abs(offset[1])) > 1:
+            raise ValueError(
+                "StaticArrivalTimeSolver currently supports immediate-neighbor edges only; "
+                "long-range offsets require explicit intermediate-cell traversal semantics"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class StaticArrivalTimeSolver:
     """Compute earliest arrival times for static directional edge spread rates.
@@ -53,7 +84,9 @@ class StaticArrivalTimeSolver:
     Parameters
     ----------
     neighborhood
-        Raster neighbor topology used to generate candidate spread edges.
+        Immediate raster neighbor topology used to generate candidate spread
+        edges. Long-range offsets are rejected until intermediate-cell/barrier
+        traversal semantics are defined explicitly.
     cell_size_m
         Square cell size in metres.
     spread_rate_provider
@@ -76,6 +109,7 @@ class StaticArrivalTimeSolver:
             raise ValueError("cell_size_m must be finite and positive")
         if not hasattr(self.spread_rate_provider, "spread_rate_m_s"):
             raise TypeError("spread_rate_provider must implement spread_rate_m_s()")
+        _validate_direct_neighbor_offsets(self.neighborhood)
 
     def solve(
         self,
