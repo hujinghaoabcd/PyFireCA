@@ -24,12 +24,8 @@ def test_half_cell_boundary_delta_matches_two_half_segment_equation(
     benchmark = _load_benchmark_module()
     result = benchmark.run_interface_case(left_fuel=left_fuel, right_fuel=right_fuel)
 
-    expected_delta = 15.0 * (
-        1.0 / result.target_rate_m_s - 1.0 / result.source_rate_m_s
-    )
-    observed_delta = (
-        result.half_cell_boundary_arrival_s - result.source_only_boundary_arrival_s
-    )
+    expected_delta = 15.0 * (1.0 / result.target_rate_m_s - 1.0 / result.source_rate_m_s)
+    observed_delta = result.half_cell_boundary_arrival_s - result.source_only_boundary_arrival_s
 
     assert observed_delta == pytest.approx(expected_delta, rel=1e-12)
     assert result.downstream_arrival_difference_s == pytest.approx(expected_delta, rel=1e-12)
