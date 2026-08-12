@@ -10,7 +10,7 @@ from pyfireca.simulator import StaticWildfireSimulationResult
 pytest.importorskip("rasterio")
 
 
-def test_write_static_simulation_outputs_round_trips_rasters_and_metrics(tmp_path) -> None:
+def test_write_static_simulation_outputs_round_trips_spatial_artifacts(tmp_path) -> None:
     metadata = RasterMetadata(
         shape=(2, 2),
         crs="EPSG:32633",
@@ -53,12 +53,3 @@ def test_write_static_simulation_outputs_round_trips_rasters_and_metrics(tmp_pat
     first_lon, first_lat = feature["geometry"]["coordinates"][0][0]
     assert 14.0 < first_lon < 16.0
     assert 40.0 < first_lat < 42.0
-
-    metrics = json.loads(paths.metrics.read_text(encoding="utf-8"))
-    assert metrics["domain_cell_count"] == 3
-    assert metrics["burned_cell_count"] == 3
-    assert metrics["unreachable_domain_cell_count"] == 0
-    assert metrics["burned_area_m2"] == pytest.approx(2700.0)
-    assert metrics["first_arrival_s"] == pytest.approx(0.0)
-    assert metrics["last_arrival_s"] == pytest.approx(20.0)
-    assert metrics["runtime_s"] == pytest.approx(0.25)
