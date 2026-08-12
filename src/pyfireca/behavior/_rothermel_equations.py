@@ -40,17 +40,19 @@ def compute_combustible_load(
 def compute_mineral_damping(effective_mineral_fraction: float) -> float:
     """Return the dimensionless mineral damping coefficient ``eta_S``.
 
-    The operational Rothermel relation is ``0.174 * S_e**-0.19`` capped at 1.
-    A zero effective-mineral fraction returns zero to match the guarded
-    operational calculation rather than evaluating a singular power.
+    The operational relation is ``0.174 / S_e**0.19``, capped at 1. The
+    singular near-zero denominator is guarded explicitly to match the pinned
+    Behave operational path.
     """
 
     _require_finite_nonnegative("effective_mineral_fraction", effective_mineral_fraction)
     if effective_mineral_fraction > 1.0:
         raise ValueError("effective_mineral_fraction must be in [0, 1]")
-    if effective_mineral_fraction == 0.0:
+
+    denominator = effective_mineral_fraction**0.19
+    if denominator < 1e-6:
         return 0.0
-    return min(1.0, 0.174 * effective_mineral_fraction**-0.19)
+    return min(1.0, 0.174 / denominator)
 
 
 def compute_moisture_damping(
@@ -60,8 +62,8 @@ def compute_moisture_damping(
     """Return the dimensionless moisture damping coefficient ``eta_M``.
 
     Moisture at or above the applicable extinction moisture produces zero
-    damping contribution. Below extinction, the Rothermel cubic polynomial is
-    evaluated using ``r = M / M_x``.
+    contribution. Below extinction, evaluate the Rothermel cubic polynomial
+    with ``r = M / M_x``.
     """
 
     _require_finite_nonnegative("moisture_fraction", moisture_fraction)
@@ -75,13 +77,12 @@ def compute_moisture_damping(
         return 0.0
 
     relative_moisture = moisture_fraction / moisture_of_extinction_fraction
-    damping = (
+    return (
         1.0
         - 2.59 * relative_moisture
         + 5.11 * relative_moisture**2
         - 3.52 * relative_moisture**3
     )
-    return max(0.0, min(1.0, damping))
 
 
 def compute_reaction_velocity_exponent(characteristic_sav_m_inv: float) -> float:
