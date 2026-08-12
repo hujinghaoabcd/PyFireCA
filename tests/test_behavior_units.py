@@ -36,7 +36,7 @@ def test_exact_length_and_spread_rate_conversions() -> None:
 
 
 def test_exact_miles_per_hour_conversion_round_trip() -> None:
-    assert MPH_TO_M_S == pytest.approx(0.44704)
+    assert pytest.approx(0.44704) == MPH_TO_M_S
     assert mph_to_m_s(1.0) == pytest.approx(0.44704)
     assert m_s_to_mph(0.44704) == pytest.approx(1.0)
 
