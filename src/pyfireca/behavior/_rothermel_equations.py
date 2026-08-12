@@ -8,6 +8,7 @@ formula boundary.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from math import exp, isfinite, sqrt
 
 from pyfireca.behavior._units import btu_lb_to_j_kg, m_inv_to_ft_inv
@@ -24,16 +25,17 @@ def _require_unit_interval(name: str, value: float) -> None:
         raise ValueError(f"{name} must be in [0, 1]")
 
 
+def _require_equal_lengths(name: str, *values: Sequence[float]) -> None:
+    lengths = {len(value) for value in values}
+    if len(lengths) > 1:
+        raise ValueError(f"{name} sequences must have equal lengths")
+
+
 def compute_combustible_load(
     oven_dry_load: float,
     total_mineral_fraction: float,
 ) -> float:
-    """Return Albini-adjusted combustible/net load in the input load unit.
-
-    Albini's operational adjustment treats the reported oven-dry fuel loading
-    as including total mineral content and uses ``w_n = w_0 * (1 - S_T)``.
-    The calculation is unit-preserving.
-    """
+    """Return Albini-adjusted combustible/net load in the input load unit."""
 
     _require_finite_nonnegative("oven_dry_load", oven_dry_load)
     _require_unit_interval("total_mineral_fraction", total_mineral_fraction)
@@ -41,12 +43,7 @@ def compute_combustible_load(
 
 
 def compute_mineral_damping(effective_mineral_fraction: float) -> float:
-    """Return the dimensionless mineral damping coefficient ``eta_S``.
-
-    The operational relation is ``0.174 / S_e**0.19``, capped at 1. The
-    singular near-zero denominator is guarded explicitly to match the pinned
-    Behave operational path.
-    """
+    """Return the dimensionless mineral damping coefficient ``eta_S``."""
 
     _require_unit_interval("effective_mineral_fraction", effective_mineral_fraction)
     denominator = effective_mineral_fraction**0.19
@@ -77,13 +74,73 @@ def compute_moisture_damping(
     )
 
 
-def compute_reaction_velocity_exponent(characteristic_sav_m_inv: float) -> float:
-    """Return Albini's dimensionless reaction-velocity exponent ``A``.
+def compute_live_moisture_of_extinction(
+    dead_loads: Sequence[float],
+    dead_sav_m_inv: Sequence[float],
+    dead_moisture_fractions: Sequence[float],
+    live_loads: Sequence[float],
+    live_sav_m_inv: Sequence[float],
+    dead_moisture_of_extinction_fraction: float,
+) -> float:
+    """Return Albini-adjusted live-fuel moisture of extinction.
 
-    The empirical correlation uses characteristic SAV in inverse feet:
-    ``A = 133 * sigma**-0.7913``. PyFireCA accepts inverse metres and performs
-    the conversion explicitly here.
+    Fine dead loading uses ``w * exp(-138 / sigma)`` while fine live loading
+    uses ``w * exp(-500 / sigma)``, with SAV expressed in inverse feet in the
+    empirical exponentials. Load units cancel in the dead/live ratio, so the
+    inputs may remain in PyFireCA's SI load units.
+
+    The final live extinction moisture is bounded below by the dead-fuel
+    extinction moisture, matching the operational Albini-adjusted path.
     """
+
+    _require_equal_lengths("dead fuel", dead_loads, dead_sav_m_inv, dead_moisture_fractions)
+    _require_equal_lengths("live fuel", live_loads, live_sav_m_inv)
+    _require_finite_nonnegative(
+        "dead_moisture_of_extinction_fraction",
+        dead_moisture_of_extinction_fraction,
+    )
+    if dead_moisture_of_extinction_fraction == 0.0:
+        return 0.0
+
+    fine_dead = 0.0
+    weighted_dead_moisture = 0.0
+    for load, sav_m_inv, moisture in zip(
+        dead_loads,
+        dead_sav_m_inv,
+        dead_moisture_fractions,
+        strict=True,
+    ):
+        _require_finite_nonnegative("dead_load", load)
+        _require_finite_nonnegative("dead_sav_m_inv", sav_m_inv)
+        _require_finite_nonnegative("dead_moisture_fraction", moisture)
+        if sav_m_inv == 0.0:
+            continue
+        weight = load * exp(-138.0 / m_inv_to_ft_inv(sav_m_inv))
+        fine_dead += weight
+        weighted_dead_moisture += weight * moisture
+
+    fine_dead_moisture = weighted_dead_moisture / fine_dead if fine_dead > 1e-7 else 0.0
+
+    fine_live = 0.0
+    for load, sav_m_inv in zip(live_loads, live_sav_m_inv, strict=True):
+        _require_finite_nonnegative("live_load", load)
+        _require_finite_nonnegative("live_sav_m_inv", sav_m_inv)
+        if sav_m_inv == 0.0:
+            continue
+        fine_live += load * exp(-500.0 / m_inv_to_ft_inv(sav_m_inv))
+
+    dead_over_live = fine_dead / fine_live if fine_live > 1e-7 else 0.0
+    live_mx = (
+        2.9
+        * dead_over_live
+        * (1.0 - fine_dead_moisture / dead_moisture_of_extinction_fraction)
+        - 0.226
+    )
+    return max(dead_moisture_of_extinction_fraction, live_mx)
+
+
+def compute_reaction_velocity_exponent(characteristic_sav_m_inv: float) -> float:
+    """Return Albini's dimensionless reaction-velocity exponent ``A``."""
 
     _require_finite_nonnegative("characteristic_sav_m_inv", characteristic_sav_m_inv)
     if characteristic_sav_m_inv == 0.0:
@@ -130,12 +187,7 @@ def compute_reaction_intensity_w_m2(
     moisture_damping: float,
     mineral_damping: float,
 ) -> float:
-    """Return one life-state reaction intensity contribution in W/m².
-
-    ``Gamma`` is published in 1/min. With SI load and heat content the direct
-    product is J/m²/min, so division by 60 converts the result to W/m².
-    Dead and live contributions are combined later by addition.
-    """
+    """Return one life-state reaction intensity contribution in W/m²."""
 
     _require_finite_nonnegative("reaction_velocity_per_min", reaction_velocity_per_min)
     _require_finite_nonnegative("combustible_load_kg_m2", combustible_load_kg_m2)
@@ -156,10 +208,7 @@ def compute_propagating_flux(
     characteristic_sav_m_inv: float,
     packing_ratio: float,
 ) -> float:
-    """Return the dimensionless propagating flux ratio ``xi``.
-
-    The empirical relation uses characteristic SAV in inverse feet.
-    """
+    """Return the dimensionless propagating flux ratio ``xi``."""
 
     _require_finite_nonnegative("characteristic_sav_m_inv", characteristic_sav_m_inv)
     _require_finite_nonnegative("packing_ratio", packing_ratio)
@@ -173,11 +222,7 @@ def compute_propagating_flux(
 
 
 def compute_heat_of_preignition_j_kg(moisture_fraction: float) -> float:
-    """Return heat of preignition ``Q_ig`` in J/kg.
-
-    The published correlation ``250 + 1116 M`` yields Btu/lb and is converted
-    explicitly to SI at this boundary.
-    """
+    """Return heat of preignition ``Q_ig`` in J/kg."""
 
     _require_finite_nonnegative("moisture_fraction", moisture_fraction)
     return btu_lb_to_j_kg(250.0 + 1116.0 * moisture_fraction)
@@ -208,11 +253,7 @@ def compute_heat_sink_j_m3(
     bulk_density_kg_m3: float,
     weighted_preignition_heat_j_kg: float,
 ) -> float:
-    """Return fuel-bed heat sink in J/m³.
-
-    The weighted preignition term is the surface-area-weighted sum of
-    ``Q_ig * epsilon`` across participating fuel classes.
-    """
+    """Return fuel-bed heat sink in J/m³."""
 
     _require_finite_nonnegative("bulk_density_kg_m3", bulk_density_kg_m3)
     _require_finite_nonnegative(
@@ -227,10 +268,7 @@ def compute_no_wind_no_slope_spread_rate_m_s(
     propagating_flux: float,
     heat_sink_j_m3: float,
 ) -> float:
-    """Return no-wind/no-slope surface spread rate in m/s.
-
-    In coherent SI units, ``(W/m²) * xi / (J/m³)`` reduces directly to m/s.
-    """
+    """Return no-wind/no-slope surface spread rate in m/s."""
 
     _require_finite_nonnegative("reaction_intensity_w_m2", reaction_intensity_w_m2)
     _require_finite_nonnegative("propagating_flux", propagating_flux)
