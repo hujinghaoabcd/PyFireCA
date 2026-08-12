@@ -167,7 +167,17 @@ jobs:
             -DBEHAVE_WASM=OFF \
             -DBEHAVE_JS=OFF \
             -DBEHAVE_HTML=OFF
-          cmake --build behave-build --target windLimitProbe --parallel 2
+
+          set +e
+          cmake --build behave-build --target windLimitProbe --parallel 2 > wind_probe_build.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "--- windLimitProbe build diagnostics (last 120 lines) ---"
+            tail -n 120 wind_probe_build.log
+            exit "$status"
+          fi
+          tail -n 30 wind_probe_build.log
 
       - name: Run explicit wind-limit probe
         shell: bash
