@@ -168,16 +168,25 @@ jobs:
             -DBEHAVE_JS=OFF \
             -DBEHAVE_HTML=OFF
 
-          set +e
-          cmake --build behave-build --target windLimitProbe --parallel 2 > wind_probe_build.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "--- windLimitProbe build diagnostics (last 120 lines) ---"
-            tail -n 120 wind_probe_build.log
-            exit "$status"
-          fi
-          tail -n 30 wind_probe_build.log
+      - name: Build explicit wind-limit probe
+        id: build_wind_probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build behave-build --target windLimitProbe --parallel 2 2>&1 | tee wind_probe_build.log
+
+      - name: Upload wind-limit probe build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behave-wind-limit-build-log
+          path: wind_probe_build.log
+          if-no-files-found: error
+
+      - name: Require successful wind-limit probe build
+        if: steps.build_wind_probe.outcome == 'failure'
+        run: exit 1
 
       - name: Run explicit wind-limit probe
         shell: bash
