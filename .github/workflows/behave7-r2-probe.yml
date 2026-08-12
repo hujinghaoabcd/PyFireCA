@@ -94,3 +94,16 @@ jobs:
           ./behave-build/testSurface fm1_slope_only.csv | tee behave7_fm1_slope_reference.log
           grep -q "Total tests passed: 1" behave7_fm1_slope_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_slope_reference.log
+
+      - name: Verify pinned FM1 wind-only reference
+        shell: bash
+        run: |
+          cat > fm1_wind_only.csv <<'CSV'
+          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
+          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",100,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,8.834274755440232
+          CSV
+
+          echo "FM1 wind-only reference: 100 ft/min direct-midflame wind; zero slope."
+          ./behave-build/testSurface fm1_wind_only.csv | tee behave7_fm1_wind_reference.log
+          grep -q "Total tests passed: 1" behave7_fm1_wind_reference.log
+          grep -q "Total tests failed: 0" behave7_fm1_wind_reference.log
