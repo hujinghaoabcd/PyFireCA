@@ -4,13 +4,13 @@
 >
 > Purpose: continue development without reconstructing scientific or architectural context from chat history.
 
-## 1. Project identity and protected scope
+## 1. Identity and protected scope
 
 Repository: `hujinghaoabcd/PyFireCA`
 
-PyFireCA is a **wildfire cellular-automata research framework** whose primary research target is the CA itself.
+PyFireCA is a **wildfire cellular-automata research framework**. The primary research target is the CA itself.
 
-Protected CA extension points:
+Protected extension points:
 
 ```text
 State
@@ -19,25 +19,22 @@ Transition Rule
 Time stepping / scheduler
 ```
 
-Fire behavior and GIS support the CA but do not define the propagation engine.
-
 Do not casually reverse these decisions:
 
-1. wildfire-specific product scope;
-2. NumPy is the readable scientific reference path;
+1. wildfire-specific scope;
+2. NumPy is the scientific reference path;
 3. Numba only after profiling;
-4. PyTorch/JAX/GPU/differentiable CA deferred;
+4. Torch/JAX/GPU/differentiable CA deferred;
 5. Level Set/front tracking are comparison methods only;
 6. fire behavior and CA propagation remain separate;
-7. GIS file I/O stays outside numerical kernels;
-8. compact package tree until real complexity justifies splitting;
-9. behavior outputs standardized, model-native inputs strongly typed/model-specific;
-10. Rothermel first, FBP later for Cell2Fire-oriented comparison;
-11. Rothermel public contract uses explicit SI units and midflame wind;
-12. R1 base calculations remain separate from R2 reaction/heat-transfer equations;
-13. R2 follows a named **Albini-adjusted Rothermel** line;
-14. external numerical references carry evidence grades and pinned provenance;
-15. GIS alignment and NoData/domain semantics are explicit and never silently repaired/inferred.
+7. GIS I/O stays outside numerical kernels;
+8. behavior outputs standardized, model-native inputs remain typed/model-specific;
+9. Rothermel first, FBP later for Cell2Fire-oriented work;
+10. Rothermel public inputs use explicit SI units and midflame wind;
+11. R1 remains separate from R2 reaction/heat-transfer equations;
+12. R2 is explicitly **Albini-adjusted Rothermel**;
+13. external numerical references carry evidence grades and provenance;
+14. GIS alignment, domain semantics, and dynamic missing-data handling are explicit rather than inferred.
 
 ## 2. Current source tree
 
@@ -58,23 +55,11 @@ src/pyfireca/
     └── rothermel.py
 ```
 
-Important tests now include:
-
-```text
-tests/test_state.py
-tests/test_data.py
-tests/test_gis.py
-tests/test_rasterio_io.py
-tests/test_rothermel_inputs.py
-tests/test_rothermel_r1.py
-tests/validation/
-```
-
-Do not create empty `config.py`, `metrics.py`, `fbp.py`, backend packages, or plugin systems merely to match an architecture diagram.
+Do not create empty `config.py`, `metrics.py`, `fbp.py`, backend packages, or plugin systems merely to match a future architecture diagram.
 
 ## 3. CA core truth
 
-Canonical state codes:
+Canonical states:
 
 ```text
 UNBURNABLE = 0
@@ -83,21 +68,11 @@ BURNING    = 2
 BURNED     = 3
 ```
 
-Reference transition semantics are **synchronous**:
+Reference transitions are **synchronous**. `TransitionRule.next_state()` reads the complete old state, returns a complete next state, and `Simulation` replaces the grid only after evaluation finishes.
 
-```text
-read complete State(t)
-        ↓
-compute complete State(t+1)
-        ↓
-replace state once
-```
+`NeighborIgnitionRule` is architecture-only; it is not physical wildfire behavior.
 
-A regression test guarantees newly ignited cells cannot propagate again in the same step.
-
-`NeighborIgnitionRule` is architecture-only and contains no physical wildfire behavior.
-
-`build_initial_state(domain_mask, ignition_mask)` now owns initial state construction:
+`build_initial_state(domain_mask, ignition_mask)` maps:
 
 ```text
 domain False  → UNBURNABLE
@@ -105,11 +80,11 @@ domain True   → UNBURNED
 ignition True → BURNING
 ```
 
-Ignition outside the domain raises.
+and rejects ignition outside the domain.
 
 ## 4. Common behavior/data contract
 
-CA-facing fire-behavior output:
+CA-facing behavior output:
 
 ```text
 spread_rate_m_s            required
@@ -119,20 +94,31 @@ flame_length_m              optional
 diagnostics                 optional
 ```
 
-`SpatialLayer` supports:
+`SpatialLayer` supports `(Y, X)` and `(T, Y, X)`. `EnvironmentalData` requires one spatial shape and one dynamic time length.
+
+Two snapshot APIs now intentionally have different semantics:
 
 ```text
-static   (Y, X)
-dynamic  (T, Y, X)
+snapshot(...)
+    policy-free array access
+
+require_complete_snapshot(required_layers, time_index=...)
+    explicit fail-fast gate
 ```
 
-`EnvironmentalData` requires one spatial shape and one dynamic time length.
+`require_complete_snapshot()` rejects declared NoData and any additional non-finite values in selected required layers. It does not interpolate, fill, mask, skip time indices, or modify permanent CA state.
 
-No hidden unit conversion, datetime interpolation, masking, or imputation is allowed at this generic boundary.
+Raised exception:
 
-## 5. GIS raster contract — implemented
+```text
+MissingEnvironmentalDataError
+```
 
-`src/pyfireca/gis.py` currently provides:
+This is the safe baseline for future dynamic weather integration.
+
+## 5. GIS raster contract — stable baseline
+
+Implemented in `gis.py`:
 
 ```text
 RasterMetadata
@@ -144,7 +130,7 @@ write_raster
 write_state_raster
 ```
 
-Geometric alignment means:
+Geometric alignment requires:
 
 ```text
 same shape
@@ -152,23 +138,23 @@ same canonical CRS
 same full affine transform within explicit tolerance
 ```
 
-The alignment layer never reprojects, resamples, crops, shifts, or changes CRS.
+No implicit reprojection/resampling/cropping/origin shifts are permitted inside simulation.
 
-Rasterio is optional:
+Rasterio is optional through:
 
 ```bash
 pip install -e ".[gis]"
 ```
 
-The dedicated `gis` CI job installs `.[dev,gis]` and runs generated-GeoTIFF integration tests.
+and has a dedicated `gis` GitHub Actions job.
 
-## 6. NoData / domain policy — now fixed
+## 6. NoData and persistent-domain semantics — fixed
 
 General rule:
 
-> **NoData is metadata until the workflow explicitly decides how it defines the simulation domain.**
+> **NoData is metadata until explicitly converted into domain semantics.**
 
-`nodata_mask(layer)` checks only the layer's declared marker:
+`nodata_mask(layer)` checks only the declared marker:
 
 - numeric sentinels supported;
 - declared NaN supported;
@@ -176,18 +162,16 @@ General rule:
 
 `build_domain_mask(environment, layer_names)`:
 
-- requires explicit layer names;
-- only static layers may define the persistent domain;
-- combines declared NoData locations across those selected layers;
+- requires explicit layer selection;
+- accepts static layers only;
+- combines declared NoData locations from those selected layers;
 - rejects dynamic layers.
 
-Reason for rejecting dynamic layers: transient missing wind/moisture must not permanently convert a geographic cell to `UNBURNABLE`.
+Reason: transient missing wind/moisture must not permanently change a cell to `UNBURNABLE`.
 
-Dynamic missing-weather handling remains a separate future policy.
+Dynamic missing data instead use the fail-fast required-snapshot gate described above.
 
 ## 7. `LandscapeInput` — current geospatial assembly boundary
-
-Implemented in `data.py`:
 
 ```text
 LandscapeInput
@@ -196,7 +180,7 @@ LandscapeInput
 └── initial_state: integer (Y, X)
 ```
 
-Required invariant:
+Invariant:
 
 ```text
 environment.spatial_shape
@@ -204,30 +188,19 @@ environment.spatial_shape
 == initial_state.shape
 ```
 
-Convenience assembly:
+`LandscapeInput.from_domain_layers()` assembles state from explicit static domain layers and optional ignition mask. `make_grid()` returns an independent `RasterGrid` copy.
 
-```python
-landscape = LandscapeInput.from_domain_layers(
-    environment,
-    metadata,
-    domain_layer_names=["fuel", "elevation"],
-    ignition_mask=ignition,
-)
-```
-
-`make_grid()` returns an independent `RasterGrid` copy.
-
-Important ownership decision:
+Ownership remains:
 
 ```text
-LandscapeInput → shared geospatial metadata + immutable-by-convention initial input
+LandscapeInput → shared spatial metadata + initial input
 RasterGrid     → evolving CA state
 Simulation     → orchestration
 ```
 
-Do not duplicate CRS/transform separately into every layer or infer one scalar `cell_size` from an arbitrary affine transform.
+Do not duplicate CRS/transform on every layer or infer an unsafe scalar cell size from arbitrary affine geometry.
 
-## 8. State GeoTIFF output convention — fixed
+## 8. State GeoTIFF convention — fixed
 
 `write_state_raster()` writes:
 
@@ -237,11 +210,7 @@ state codes    0..3
 GeoTIFF NoData None
 ```
 
-This is deliberate. `UNBURNABLE=0` is a real model state; it is not file-level NoData.
-
-Do not propagate input sentinels such as `-9999` into state outputs.
-
-Arrival-time output conventions remain undecided because arrival time itself is not implemented yet.
+`UNBURNABLE=0` is a real model state and is not file-level NoData. Do not propagate input sentinels such as `-9999` into state outputs.
 
 ## 9. Rothermel input / R1 truth
 
@@ -256,7 +225,7 @@ LIVE_HERBACEOUS
 LIVE_WOODY
 ```
 
-Core input object receives:
+Core input fields:
 
 ```text
 fuel
@@ -267,9 +236,9 @@ slope_deg
 aspect_deg
 ```
 
-10-m / 20-ft wind adjustment stays outside the core Rothermel input contract.
+10-m/20-ft wind adjustment remains external.
 
-R1 implemented:
+R1 implemented and tested:
 
 ```text
 SI ↔ ft/lb/Btu/min conversions
@@ -280,11 +249,11 @@ compute_bulk_density_kg_m3
 compute_optimum_packing_ratio
 ```
 
-Do not redesign this R1 layer merely to shorten later formulas.
+Do not redesign R1 just to make R2 shorter.
 
 ## 10. R2 reference variant and validation gate
 
-Target formulation:
+Target:
 
 > **Albini-adjusted Rothermel surface fire**
 
@@ -293,7 +262,7 @@ Locked Albini 1976 changes:
 1. combustible loading correction;
 2. revised reaction-velocity exponent `A = 133 * sigma^-0.7913`;
 3. revised live moisture-of-extinction calculation with dead-Mx lower bound;
-4. dead and live reaction intensities added using the later operational treatment.
+4. revised dead/live reaction-intensity treatment.
 
 Andrews 2018 is the modern consolidated consistency reference.
 
@@ -306,7 +275,7 @@ Grade C  independent implementation comparison
 Grade D  internal synthetic/analytical fixture
 ```
 
-Pinned external fixtures:
+Pinned:
 
 ```text
 tests/validation/data/albini1976_worked_examples.csv
@@ -315,56 +284,54 @@ tests/validation/data/behave7_surface_reference.csv
 
 Current scientific gap:
 
-> no precise external **zero-wind + zero-slope** numeric fixture has yet been locked for the selected Albini-adjusted R2 chain.
+> no precise external **zero-wind + zero-slope** value has yet been locked for the selected Albini-adjusted R2 chain.
 
-Do not fabricate a Grade A value from PyFireCA's own implementation.
+Do not fabricate a Grade A fixture from PyFireCA calculations.
 
-Acceptable fallback: generate a zero-wind/zero-slope case from a pinned official Behave 7 build and label it Grade B with exact build/input/output provenance.
+Acceptable fallback: run a pinned official Behave 7 build for an exact zero-wind/zero-slope case and record it as Grade B with exact revision/input/output provenance.
 
 ## 11. Latest verified CI state
 
-Workflow run:
+Latest verified run:
 
 ```text
-31562196229
-commit 01ec0576e223666d37ceb4bac764b1136244e08a
+workflow 31562488352
+commit   b5bdedebe8226d85719d6947a6043db866a579d4
 ```
 
-All jobs passed:
+Everything passed:
 
 ```text
-quality
-  Ruff lint              ✓
-  Ruff format            ✓
-  pytest + coverage      ✓
-
-gis                      ✓
-Python 3.11              ✓
-Python 3.12              ✓
-Python 3.13              ✓
+quality: Ruff lint / Ruff format / pytest+coverage  ✓
+gis: Rasterio integration                          ✓
+Python 3.11                                        ✓
+Python 3.12                                        ✓
+Python 3.13                                        ✓
 ```
 
-The state-raster writer and its integration tests are therefore part of the verified green baseline.
+This baseline includes:
+
+- NoData/domain tests;
+- `LandscapeInput` tests;
+- canonical state GeoTIFF tests;
+- required dynamic snapshot fail-fast tests.
 
 ## 12. Exact next work
 
-Two lines can proceed independently.
+The GIS/data foundation is now sufficient to **pause**. Do not add xarray, NetCDF, temporal interpolation, high-level loaders, or preprocessing frameworks without a concrete integration.
 
-### Scientific line
+Return to the R2 scientific gate:
 
 ```text
-find/generate pinned external zero-wind + zero-slope reference
-        ↓
-implement small Albini-adjusted pure functions
-        ↓
-assemble validated no-wind/no-slope ROS
-        ↓
-wind/slope
-        ↓
-RothermelModel.compute() → FireBehaviorResult
+1. Obtain reproducible zero-wind + zero-slope external reference
+2. Pin provenance and evidence grade
+3. Implement formula-level Albini-adjusted pure functions
+4. Assemble and validate base ROS
+5. Only then add wind/slope
+6. Then expose RothermelModel.compute() → FireBehaviorResult
 ```
 
-Expected formula-level functions after the fixture gate:
+Expected R2 functions after the fixture gate:
 
 ```text
 combustible/net fuel loading
@@ -381,38 +348,15 @@ heat source/sink
 base ROS
 ```
 
-### GIS/data line
+## 13. Deferred work
 
-Next unresolved semantic problem is **dynamic weather missing data**, not static domain NoData.
-
-Possible policies must be explicit and testable:
+Do not pull forward yet:
 
 ```text
-fail on missing weather
-use previously validated interpolation
-explicit masked behavior result
-another documented strategy
-```
-
-Do not choose one globally until concrete weather integration is available.
-
-After that, consider:
-
-```text
-arrival-time output convention
-high-level multi-file landscape loader
-explicit preprocessing/reprojection helper
-physical timestamps/interpolation
-NetCDF/xarray only if actually required
-```
-
-## 13. Do not pull these forward prematurely
-
-Do not start yet:
-
-```text
+physical timestamp/interpolation framework
+NetCDF/xarray adapter
 Cell2Fire-like distance accumulation
-FBP implementation
+FBP
 probabilistic/learned CA
 crown fire
 spotting
@@ -422,20 +366,19 @@ Numba optimization
 Torch/JAX/GPU
 ```
 
-The first behavior-informed CA rule should come only after at least one physical ROS path is independently validated.
+The first behavior-informed CA rule comes only after a physical ROS path is independently validated.
 
 ## 14. Files to read first next session
 
 ```text
 1. docs/STATUS.md
 2. docs/HANDOFF.md
-3. docs/SESSION_LOG.md
-4. docs/GIS_DATA_CONTRACT.md
-5. docs/ROTHERMEL_REFERENCE.md
-6. docs/VALIDATION.md
+3. docs/ROTHERMEL_REFERENCE.md
+4. docs/VALIDATION.md
+5. docs/GIS_DATA_CONTRACT.md
+6. src/pyfireca/behavior/rothermel.py
 7. src/pyfireca/data.py
 8. src/pyfireca/gis.py
-9. src/pyfireca/behavior/rothermel.py
 ```
 
 The handoff describes repository truth, not planned work that was never implemented.
