@@ -1,0 +1,100 @@
+name: Behave 7 R3 vector regression
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/behave7-r3-vector.yml"
+      - "src/pyfireca/behavior/_rothermel_vectors.py"
+      - "src/pyfireca/behavior/_directions.py"
+      - "tests/test_rothermel_r3_vectors.py"
+      - "tests/test_behavior_directions.py"
+
+permissions:
+  contents: read
+
+jobs:
+  perpendicular-wind-slope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pinned Behave 7 app
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave-app
+          ref: a3cfcd5903188d73445948af16644868225bb9d5
+          path: behave-app
+          submodules: false
+          persist-credentials: false
+
+      - name: Check out pinned Behave core
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave
+          ref: 29888c7ad364aa18cfb340f4c25a8e395f24260f
+          path: behave-app/behave-lib/behave-mirror
+          persist-credentials: false
+
+      - name: Build official testSurface
+        run: |
+          cmake \
+            -S behave-app/behave-lib \
+            -B behave-build \
+            -DTEST_BEHAVE=ON \
+            -DBEHAVE_WASM=OFF \
+            -DBEHAVE_JS=OFF \
+            -DBEHAVE_HTML=OFF
+          cmake --build behave-build --target testSurface --parallel 2
+
+      - name: Create perpendicular FM1 reference row
+        run: |
+          python - <<'PY'
+          import csv
+          import math
+
+          base_ch_h = 4.4262698923571939
+          slope_factor = 3.70310726238668
+          wind_factor = 0.9958734939987067
+          expected_ch_h = base_ch_h * (1.0 + math.hypot(slope_factor, wind_factor))
+
+          header = [
+              "fuelModelNumber", "moistureOneHour", "moistureTenHour",
+              "moistureHundredHour", "moistureLiveHerbaceous", "moistureLiveWoody",
+              "moistureUnits", "slope", "slopeUnits", "aspect",
+              "windAndSpreadOrientationMode", "windSpeed", "windSpeedUnits",
+              "windHeightInputMode", "windDirection", "canopyCover",
+              "canopyCoverUnits", "canopyHeight", "canopyHeightUnits",
+              "crownRatio", "spreadRate",
+          ]
+          row = [
+              1, 5.0, 5.0, 5.0, 100.0, 100.0, "Percent",
+              30.0, "Percent", 0.0, "RelativeToUpslope",
+              100.0, "FeetPerMinute", "DirectMidflame", 90.0,
+              0.0, "Percent", 0.0, "Feet", 0.0, expected_ch_h,
+          ]
+          with open("fm1_perpendicular_wind_slope.csv", "w", newline="") as stream:
+              writer = csv.writer(stream)
+              writer.writerow(header)
+              writer.writerow(row)
+
+          print(f"expected_spread_rate_chains_h={expected_ch_h:.17g}")
+          print(
+              "expected_direction_relative_to_upslope_deg="
+              f"{math.degrees(math.atan2(wind_factor, slope_factor)):.17g}"
+          )
+          PY
+
+      - name: Verify official maximum spread magnitude
+        run: |
+          ./behave-build/testSurface fm1_perpendicular_wind_slope.csv | tee behave7_r3_vector.log
+          grep -q "Total tests passed: 1" behave7_r3_vector.log
+          grep -q "Total tests failed: 0" behave7_r3_vector.log
+
+      - name: Upload reference row and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behave-r3-perpendicular-reference
+          path: |
+            fm1_perpendicular_wind_slope.csv
+            behave7_r3_vector.log
+          if-no-files-found: error
