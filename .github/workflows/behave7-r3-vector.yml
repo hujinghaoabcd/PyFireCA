@@ -72,7 +72,7 @@ jobs:
               0.0, "Percent", 0.0, "Feet", 0.0, expected_ch_h,
           ]
           with open("fm1_perpendicular_wind_slope.csv", "w", newline="") as stream:
-              writer = csv.writer(stream)
+              writer = csv.writer(stream, lineterminator="\n")
               writer.writerow(header)
               writer.writerow(row)
 
