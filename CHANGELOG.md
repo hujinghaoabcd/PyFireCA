@@ -10,8 +10,9 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 
 - Initial English and Chinese project README files.
 - Modern `pyproject.toml` using a `src/` layout and Hatchling build backend.
-- Living design, development, status, validation, handoff, behavior/data, and Rothermel reference documentation.
+- Living design, development, status, validation, handoff, behavior/data, GIS, and Rothermel reference documentation.
 - Explicit wildfire `FireState` model and state-array validation.
+- `build_initial_state()` for explicit domain-mask and ignition-mask to canonical CA state conversion.
 - Moore and Von Neumann neighborhood implementations.
 - Boundary-safe raster neighbor indexing with clipped-boundary semantics.
 - Minimal `RasterGrid` state container.
@@ -22,6 +23,12 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Immutable `FireBehaviorResult` with explicit spread-rate, direction, intensity, and flame-length units/conventions.
 - `SpatialLayer` for static `(Y, X)` and dynamic `(T, Y, X)` numerical environmental data.
 - `EnvironmentalData` with shared spatial/time alignment validation and snapshot access.
+- Explicit `nodata_mask()` utility that uses only declared NoData metadata.
+- `build_domain_mask()` for intentionally deriving a persistent simulation domain from selected static layers.
+- `LandscapeInput` for one shared `RasterMetadata`, aligned environmental layers, and a validated initial CA state.
+- Lightweight `RasterMetadata`, raster-alignment validation, and named multi-layer alignment checks.
+- Optional Rasterio `read_raster()` / `write_raster()` adapters with dedicated GIS CI coverage.
+- Canonical `write_state_raster()` output using `uint8` fire-state codes and no file-level NoData marker.
 - Rothermel six-class `FuelClass` ordering.
 - SI-unit `RothermelFuelModel` with burnability and loaded-class physical-property validation.
 - `RothermelFuelMoisture` with explicit dry-mass-fraction inputs and six-class expansion.
@@ -33,7 +40,8 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - R1 `compute_optimum_packing_ratio()` with explicit SI-to-inverse-foot conversion at the legacy correlation boundary.
 - Hand-computable R1 regression fixtures plus nonburnable/invalid-input tests.
 - Dedicated Rothermel input-contract tests and `docs/ROTHERMEL_REFERENCE.md` implementation/validation plan.
-- GitHub Actions CI configuration covering quality checks and Python 3.11/3.12/3.13.
+- Grade A Albini 1976 worked-example fixtures and pinned Grade B Behave 7 surface regression data with provenance/integrity checks.
+- GitHub Actions CI configuration covering quality checks, optional GIS tests, and Python 3.11/3.12/3.13.
 
 ### Design decisions
 
@@ -43,6 +51,11 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Behavior-model outputs are standardized while model-native inputs remain strongly typed and model-specific.
 - Common behavior quantities crossing the CA boundary use explicit SI-derived units.
 - Environmental data remain array-first; physical time interpolation and xarray/Zarr abstractions are deferred until required.
+- NoData remains metadata until a workflow explicitly selects static layers that define the persistent simulation domain.
+- Dynamic weather/moisture NoData cannot silently create permanent `UNBURNABLE` cells.
+- `LandscapeInput` owns one shared geospatial metadata object while evolving state remains in `RasterGrid`/`Simulation`.
+- State GeoTIFF output uses model state `UNBURNABLE=0` rather than conflating model state with file-level NoData.
+- GIS preprocessing may transform inputs intentionally; CA simulation never silently reprojects/resamples/alters its grid.
 - Rothermel is the first behavior reference implementation; FBP remains planned for Cell2Fire-oriented comparison work.
 - The Rothermel public fuel contract uses a stable six-class representation before equation/catalogue implementation.
 - Rothermel receives midflame wind explicitly; canopy/exposure wind-adjustment logic is kept outside the core model input.
@@ -50,4 +63,5 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - The R2 reference variant is explicitly **Albini-adjusted Rothermel** rather than an unlabelled mixture of original Rothermel 1972 and later operational corrections.
 - The Albini-adjusted R2 plan records four material adjustments before code: combustible loading, reaction-velocity exponent, revised live moisture of extinction, and dead/live reaction-intensity combination.
 - R2 no-wind/no-slope equations will not be assembled until authoritative numerical fixtures for the selected formulation are documented.
+- External validation values carry evidence grades and pinned provenance.
 - PyTorch/JAX/differentiable CA remain outside the current development scope.
