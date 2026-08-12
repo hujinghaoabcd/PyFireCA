@@ -146,13 +146,9 @@ class RothermelFuelModel:
             if self.loads_kg_m2[index] <= 0.0:
                 continue
             if self.sav_ratio_m_inv[index] <= 0.0:
-                raise ValueError(
-                    f"loaded class {fuel_class.name} must have positive SAV ratio"
-                )
+                raise ValueError(f"loaded class {fuel_class.name} must have positive SAV ratio")
             if self.heat_content_j_kg[index] <= 0.0:
-                raise ValueError(
-                    f"loaded class {fuel_class.name} must have positive heat content"
-                )
+                raise ValueError(f"loaded class {fuel_class.name} must have positive heat content")
             if self.particle_density_kg_m3[index] <= 0.0:
                 raise ValueError(
                     f"loaded class {fuel_class.name} must have positive particle density"
