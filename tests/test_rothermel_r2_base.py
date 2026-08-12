@@ -1,6 +1,10 @@
 import pytest
 
-from pyfireca.behavior._rothermel_base import compute_base_spread_rate_m_s
+from pyfireca.behavior._rothermel_base import (
+    compute_base_spread_rate_m_s,
+    compute_base_spread_result,
+)
+from pyfireca.behavior._rothermel_dynamic import apply_dynamic_herbaceous_transfer
 from pyfireca.behavior._units import (
     btu_lb_to_j_kg,
     feet_to_metres,
@@ -78,6 +82,16 @@ def test_typed_fm2_live_fuel_base_ros_matches_pinned_behave7_reference() -> None
     assert observed == pytest.approx(0.013305319151517395, rel=1e-13)
 
 
-def test_dynamic_fuel_requires_explicit_load_transfer_before_base_ros() -> None:
-    with pytest.raises(NotImplementedError, match="dynamic herbaceous"):
-        compute_base_spread_rate_m_s(_fm2(dynamic=True), _moisture())
+def test_dynamic_base_ros_applies_the_same_explicit_transfer_preparation() -> None:
+    fuel = _fm2(dynamic=True)
+    moisture = _moisture()
+    prepared = apply_dynamic_herbaceous_transfer(fuel, moisture)
+
+    dynamic_result = compute_base_spread_result(fuel, moisture)
+    prepared_static_ros = compute_base_spread_rate_m_s(prepared.fuel, moisture)
+
+    assert dynamic_result.spread_rate_m_s == pytest.approx(prepared_static_ros, rel=1e-13)
+    assert dynamic_result.dynamic_herbaceous_transfer_fraction == pytest.approx(0.223)
+    assert dynamic_result.dynamic_herbaceous_transferred_load_kg_m2 == pytest.approx(
+        prepared.transferred_load_kg_m2
+    )
