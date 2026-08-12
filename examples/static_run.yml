@@ -1,0 +1,32 @@
+# PyFireCA baseline static simulator configuration (version 1)
+version: 1
+
+# Must match the north-up square raster pixel size in metres.
+cell_size_m: 30.0
+
+# Behave-compatible optional wind limit; disabled by default.
+use_wind_speed_limit: false
+
+# Paths are resolved relative to this YAML file.
+# Units are fixed by the baseline input contract.
+inputs:
+  fuel_model: data/fuel_model.tif
+  dead_1h_moisture: data/dead_1h_moisture.tif
+  dead_10h_moisture: data/dead_10h_moisture.tif
+  dead_100h_moisture: data/dead_100h_moisture.tif
+  live_herbaceous_moisture: data/live_herbaceous_moisture.tif
+  live_woody_moisture: data/live_woody_moisture.tif
+  midflame_wind_speed: data/midflame_wind_speed.tif
+  wind_from_direction: data/wind_from_direction.tif
+  slope: data/slope.tif
+  aspect: data/aspect.tif
+
+# Multiple ignitions and delayed ignitions are supported.
+ignitions:
+  - row: 100
+    col: 120
+    time_s: 0.0
+
+# The directory must not contain files from a previous run.
+output:
+  directory: runs/static-example
