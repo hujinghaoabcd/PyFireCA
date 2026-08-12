@@ -1,8 +1,8 @@
-"""Lightweight geospatial raster metadata and alignment validation.
+"""Lightweight geospatial raster metadata, alignment, and optional GIS I/O.
 
 The CA kernel remains independent of Rasterio/GDAL objects and file paths.
-This module defines the small geospatial contract that adapters must satisfy
-before raster data enter a simulation.
+Rasterio is imported only by the optional adapter functions so the numerical
+core stays usable with the base dependency set.
 """
 
 from __future__ import annotations
@@ -10,8 +10,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import hypot, isclose, isfinite
+from pathlib import Path
+
+import numpy as np
+from numpy.typing import NDArray
 
 AffineTuple = tuple[float, float, float, float, float, float]
+RasterArray = NDArray[np.number]
 
 
 class RasterAlignmentError(ValueError):
@@ -145,3 +150,96 @@ def validate_named_raster_alignment(
             )
         except RasterAlignmentError as exc:
             raise RasterAlignmentError(f"layer {name!r}: {exc}") from exc
+
+
+def _require_rasterio():
+    """Import the optional Rasterio dependency with an actionable error."""
+
+    try:
+        import rasterio
+        from rasterio import Affine
+    except ImportError as exc:
+        raise ImportError(
+            "Rasterio support is optional; install PyFireCA with the 'gis' extra"
+        ) from exc
+    return rasterio, Affine
+
+
+def _metadata_from_rasterio_dataset(dataset) -> RasterMetadata:
+    """Convert an open Rasterio dataset to the lightweight metadata contract."""
+
+    if dataset.crs is None:
+        raise ValueError("raster dataset must define a CRS")
+
+    transform = dataset.transform
+    return RasterMetadata(
+        shape=(int(dataset.height), int(dataset.width)),
+        crs=dataset.crs.to_string(),
+        transform=(
+            float(transform.a),
+            float(transform.b),
+            float(transform.c),
+            float(transform.d),
+            float(transform.e),
+            float(transform.f),
+        ),
+        nodata=dataset.nodata,
+    )
+
+
+def read_raster(path: str | Path, *, band: int = 1) -> tuple[RasterArray, RasterMetadata]:
+    """Read one numeric raster band and return its array plus spatial metadata.
+
+    The adapter reads source values as stored. It does not reproject, resample,
+    mask, fill NoData, or change units.
+    """
+
+    if isinstance(band, bool) or not isinstance(band, int) or band < 1:
+        raise ValueError("band must be a positive integer")
+
+    rasterio, _Affine = _require_rasterio()
+    with rasterio.open(path) as dataset:
+        if band > dataset.count:
+            raise IndexError(f"band {band} is outside raster band range [1, {dataset.count}]")
+        metadata = _metadata_from_rasterio_dataset(dataset)
+        values = np.asarray(dataset.read(band))
+
+    if not np.issubdtype(values.dtype, np.number):
+        raise TypeError("raster band must use a numeric dtype")
+    return values, metadata
+
+
+def write_raster(
+    path: str | Path,
+    values: RasterArray,
+    metadata: RasterMetadata,
+) -> None:
+    """Write one GeoTIFF band using explicit reference metadata.
+
+    The function requires exact array/metadata shape agreement and preserves
+    the supplied CRS, affine transform, dtype, and NoData marker. It does not
+    create parent directories or alter grid geometry.
+    """
+
+    values = np.asarray(values)
+    if values.ndim != 2:
+        raise ValueError("values must be a two-dimensional raster array")
+    if not np.issubdtype(values.dtype, np.number):
+        raise TypeError("values must use a numeric dtype")
+    if values.shape != metadata.shape:
+        raise ValueError(f"values shape {values.shape} does not match metadata {metadata.shape}")
+
+    rasterio, Affine = _require_rasterio()
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=metadata.shape[0],
+        width=metadata.shape[1],
+        count=1,
+        dtype=values.dtype,
+        crs=metadata.crs,
+        transform=Affine(*metadata.transform),
+        nodata=metadata.nodata,
+    ) as dataset:
+        dataset.write(values, 1)
