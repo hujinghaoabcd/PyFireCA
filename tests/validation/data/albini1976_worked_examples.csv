@@ -1,0 +1,3 @@
+sourceExample,fuelModelNumber,deadFuelMoisturePercent,liveFuelMoisturePercent,wind20ftMph,slopePercent,expectedSpreadRateChainsPerHour,expectedFlameLengthFt,scopeNote
+1,3,5,,8,0,97,12.5,"Level ground; nonzero 20-ft wind"
+2,2,8,50,0,70,34,6.2,"Calm wind; nonzero slope"
