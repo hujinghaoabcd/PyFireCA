@@ -38,8 +38,10 @@ Fire behavior and GIS support the CA but do not define the simulation engine.
 11. Behavior outputs are standardized; model-native Rothermel/FBP inputs remain strongly typed and model-specific.
 12. Physical weather time interpolation is deferred until a concrete data integration exists.
 13. Rothermel is the first behavior reference implementation; FBP remains required later for Cell2Fire-oriented comparisons.
+14. Rothermel legacy-unit conversion is centralized rather than duplicated inside equation functions.
+15. R1 heterogeneous-fuel weighting/base quantities are independently testable and remain separate from the R2 reaction/heat-transfer chain.
 
-The last item is a sequencing decision, not a claim that Rothermel is universally preferable to FBP.
+The Rothermel-first choice is a sequencing decision, not a claim that Rothermel is universally preferable to FBP.
 
 ## 3. Reference-project lessons
 
@@ -81,6 +83,7 @@ src/pyfireca/
 └── behavior/
     ├── __init__.py
     ├── base.py
+    ├── _units.py
     └── rothermel.py
 ```
 
@@ -89,10 +92,12 @@ Tests:
 ```text
 tests/
 ├── test_behavior_base.py
+├── test_behavior_units.py
 ├── test_data.py
 ├── test_grid.py
 ├── test_neighborhood.py
 ├── test_rothermel_inputs.py
+├── test_rothermel_r1.py
 ├── test_rules.py
 ├── test_simulation.py
 └── test_state.py
@@ -181,18 +186,11 @@ SpatialLayer
 EnvironmentalData
 ```
 
-`SpatialLayer` supports:
-
-```text
-static   (Y, X)
-dynamic  (T, Y, X)
-```
-
-with optional `units` and `nodata` metadata.
+`SpatialLayer` supports static `(Y, X)` and dynamic `(T, Y, X)` arrays with optional `units` and `nodata` metadata.
 
 `EnvironmentalData` requires one shared spatial shape and one shared dynamic time length. `snapshot(t)` returns aligned 2-D arrays.
 
-Current limitations are intentional:
+Intentional current limitations:
 
 - integer time index only;
 - no datetime interpolation;
@@ -205,11 +203,9 @@ Detailed rules: `docs/BEHAVIOR_DATA_CONTRACT.md`.
 
 ## 8. Rothermel input contract
 
-`src/pyfireca/behavior/rothermel.py` now exists but contains **inputs/validation only**, not the equation implementation.
-
 ### Fuel class order
 
-The public six-class order is fixed:
+The public six-class order is fixed and must not be reordered:
 
 ```text
 0 DEAD_1H
@@ -219,8 +215,6 @@ The public six-class order is fixed:
 4 LIVE_HERBACEOUS
 5 LIVE_WOODY
 ```
-
-Do not reorder these indices. Tests intentionally lock them.
 
 ### `RothermelFuelModel`
 
@@ -246,8 +240,8 @@ Validation rules:
 - finite/non-negative quantities;
 - mineral fractions in `[0, 1]`;
 - burnable model requires positive depth, extinction moisture, and total load;
-- a loaded fuel class requires positive SAV ratio, heat content, and particle density;
-- a nonburnable model may use zeros.
+- loaded classes require positive SAV ratio, heat content, and particle density;
+- nonburnable models may use zeros.
 
 The dataclass is not yet tied to an Anderson or Scott--Burgan catalogue.
 
@@ -263,9 +257,7 @@ live_herbaceous_fraction
 live_woody_fraction
 ```
 
-`as_six_class_values()` currently assigns dead-herbaceous moisture from dead 1-h moisture. Live moisture may exceed 1.0 on a dry-mass basis.
-
-Dynamic herbaceous load transfer is not implemented yet.
+`as_six_class_values()` currently assigns dead-herbaceous moisture from dead 1-h moisture. Live moisture may exceed 1.0 on a dry-mass basis. Dynamic herbaceous load transfer is not implemented yet.
 
 ### `RothermelInputs`
 
@@ -286,26 +278,112 @@ Important conventions:
 - aspect is clockwise from geographic north;
 - 10-m/20-ft wind adjustment does not belong inside the core Rothermel input contract.
 
-Detailed plan: `docs/ROTHERMEL_REFERENCE.md`.
+## 9. R1 unit-conversion layer
 
-## 9. Scientific source/provenance rule
+`src/pyfireca/behavior/_units.py` centralizes exact public-SI ↔ published/native conversions used by the reference path:
 
-The Rothermel code must be an independent implementation of published equations.
+```text
+m ↔ ft
+kg/m² ↔ lb/ft²
+kg/m³ ↔ lb/ft³
+1/m ↔ 1/ft
+J/kg ↔ Btu/lb
+m/s ↔ ft/min
+```
 
-Primary reference path documented for implementation:
+The constants are explicitly named and round-trip tested in `tests/test_behavior_units.py`.
+
+Do not reintroduce raw conversion constants inside future equation functions.
+
+## 10. R1 heterogeneous-fuel/base calculations
+
+`src/pyfireca/behavior/rothermel.py` now contains these scientific functions in addition to input dataclasses:
+
+```text
+compute_surface_area_weights
+compute_characteristic_sav_m_inv
+compute_packing_ratio
+compute_bulk_density_kg_m3
+compute_optimum_packing_ratio
+```
+
+### Surface-area weights
+
+Per-class relative surface area is proportional to:
+
+```text
+SAV × oven-dry load / particle density
+```
+
+The function returns:
+
+- six within-category weights (`f_ij`-like dead/live size-class weights);
+- two dead/live category weights (`f_i`-like weights).
+
+`tests/test_rothermel_r1.py` uses a synthetic three-loaded-class fuel model with hand-computable weights:
+
+```text
+dead 1-h within dead = 1/3
+dead 10-h within dead = 2/3
+live herb within live = 1
+dead category = 3/7
+live category = 4/7
+```
+
+This fixture is intentionally independent of SimFire/Pyretechnics outputs.
+
+### Characteristic SAV
+
+Uses the same within-category and category surface-area weights. The synthetic fixture expects `300 1/m`.
+
+### Packing ratio
+
+Computed as particle-volume-per-bed-volume:
+
+```text
+sum(load / particle_density) / fuel-bed depth
+```
+
+Synthetic fixture expects `0.003`.
+
+### Bulk density
+
+Computed as total oven-dry load / fuel-bed depth. Synthetic fixture expects `3 kg/m³`.
+
+### Optimum packing ratio
+
+The SI characteristic SAV is explicitly converted to inverse feet before applying the published legacy-unit correlation. Zero returns zero; negative characteristic SAV raises.
+
+## 11. R2 decision gate — do not skip
+
+The next scientific stage is **not** just “copy the rest of Rothermel”.
+
+Before implementing no-wind/no-slope ROS, reconcile the exact reference formulation across Rothermel 1972, Albini 1976, and Andrews 2018.
+
+A concrete discrepancy already observed in independent software is that later implementations use an Albini replacement for the reaction-velocity exponent/correlation rather than the original 1972 expression. Other intermediate conventions, including net fuel loading and live/dynamic-fuel treatment, also need primary-source resolution.
+
+Do not mix formulas from different vintages because they happen to coexist in reference software.
+
+The selected R2 formulation must be named/documented and backed by authoritative numeric fixtures before the complete ROS chain is accepted.
+
+## 12. Scientific source / provenance rule
+
+Primary source path:
 
 1. Rothermel 1972, USDA Forest Service Research Paper INT-115;
 2. Albini 1976, USDA Forest Service GTR INT-30 where applicable;
 3. Andrews 2018, USDA Forest Service RMRS-GTR-371;
 4. Scott & Burgan 2005, USDA Forest Service RMRS-GTR-153 for later fuel catalogues.
 
-SimFire and Pyretechnics are independent numerical comparison paths. They are **not** code sources to copy.
+SimFire and Pyretechnics are independent numerical comparison paths, not code sources to copy.
 
-When two implementations disagree, return to the scientific reference and add a regression/reference test for the resolved interpretation.
+When implementations disagree, return to primary scientific references, document the interpretation, and add a regression/reference test.
 
-## 10. CI / engineering state
+Detailed plan: `docs/ROTHERMEL_REFERENCE.md`.
 
-GitHub Actions currently runs:
+## 13. CI / engineering state
+
+GitHub Actions runs:
 
 ```text
 Ruff lint
@@ -316,7 +394,7 @@ Python 3.12 pytest
 Python 3.13 pytest
 ```
 
-The latest run after formatting the Rothermel input contract completed fully green.
+The new R1 scientific tests pass in the Python 3.11/3.12/3.13 matrix. During this pass, CI failures were Ruff-only style issues in unit-test assertions; those assertions were corrected. The next session should inspect the newest run if the badge is not green rather than changing scientific code based on an older formatting failure.
 
 Engineering files already present:
 
@@ -332,9 +410,9 @@ README.md
 README.zh-CN.md
 ```
 
-RepoForge migration remains intentionally deferred. When applied, use `scientific-python / standard` with managed README sections; do not overwrite the hand-written scientific README body without reviewed migration.
+RepoForge migration remains intentionally deferred. When applied, use `scientific-python / standard` with managed README sections and preserve the hand-written scientific body.
 
-## 11. Performance contract
+## 14. Performance contract
 
 Do not start C++, Cython, CUDA, Torch, or JAX.
 
@@ -348,38 +426,41 @@ profiling
 Numba for measured hotspots only
 ```
 
-Keep the NumPy path after optimization for numerical equivalence tests.
+Keep the NumPy path after optimization for equivalence testing.
 
-## 12. Exact next implementation target
+## 15. Exact next implementation target
 
-Do **not** redesign the input contract and do **not** jump to Cell2Fire-like propagation yet.
+Do **not** redesign the R1 input/weighting contract and do **not** jump to Cell2Fire-like propagation yet.
 
-Continue Rothermel in stages:
+Next sequence:
 
 ```text
-R1 explicit unit conversions + base fuel quantities
+R2a reconcile Rothermel 1972 vs Albini/Andrews corrections
  ↓
-R2 no-wind / no-slope surface ROS
+R2b create authoritative numerical fixtures
  ↓
-R3 wind + slope effects
+R2c implement formula-level pure functions
  ↓
-R4 FireBehaviorResult output
- ↓
-R5 verified standard fuel catalogues
- ↓
-R6 behavior-informed CA rule
+R2d assemble validated no-wind/no-slope ROS
 ```
 
-### Next code work
+The formula-level functions expected after the decision gate include:
 
-1. define explicit native/legacy-unit conversion helpers required by the published equation path;
-2. test conversions independently;
-3. implement small pure functions for base Rothermel fuel quantities;
-4. create numeric reference fixtures from authoritative material before accepting complete ROS calculations;
-5. keep each equation stage directly testable;
-6. do not mix directional CA neighborhood logic into the behavior equations.
+```text
+mineral damping
+moisture damping
+net fuel loading
+reaction velocity/intensity
+propagating flux ratio
+effective heating number
+heat of preignition
+heat source/sink
+base ROS
+```
 
-## 13. Open questions
+Only after R2 is independently validated should the project proceed to wind/slope, common `FireBehaviorResult`, or behavior-informed CA propagation.
+
+## 16. Open questions
 
 Resolved:
 
@@ -388,24 +469,27 @@ Resolved:
 - static/dynamic in-memory layer shape;
 - model-specific input policy;
 - first behavior family: Rothermel;
-- initial six-class Rothermel fuel representation;
-- midflame wind as the core behavior input.
+- six-class Rothermel fuel representation;
+- midflame wind as core behavior input;
+- explicit central unit-conversion layer;
+- R1 surface-area weighting, characteristic SAV, packing ratio, bulk density, and optimum packing ratio.
 
 Still open:
 
-1. exact internal legacy-unit calculation strategy for the reference equation implementation;
-2. authoritative numerical fixtures for each Rothermel stage;
-3. dynamic fuel curing implementation details;
-4. physical weather timestamps/interpolation;
-5. sparse vs full-array CA transitions after profiling;
-6. asynchronous/event-driven scheduler architecture;
-7. extra propagation state for Cell2Fire-like distance accumulation;
-8. GeoTIFF/NoData conventions for state and arrival-time outputs;
-9. Monte Carlo RNG stream strategy.
+1. exact R2 correction/equation set (1972 original vs later Albini/Andrews operational corrections);
+2. authoritative numerical fixtures for R2;
+3. live moisture-of-extinction implementation;
+4. dynamic herbaceous curing implementation;
+5. physical weather timestamps/interpolation;
+6. sparse vs full-array CA transitions after profiling;
+7. asynchronous/event-driven scheduler architecture;
+8. extra propagation state for Cell2Fire-like distance accumulation;
+9. GeoTIFF/NoData conventions for state and arrival-time outputs;
+10. Monte Carlo RNG stream strategy.
 
-Any resolved item that affects architecture/scientific interpretation must be documented before or with code.
+Any resolved scientific item must be documented before or with code.
 
-## 14. Handoff checklist
+## 17. Handoff checklist
 
 At the end of every development session this file must answer:
 
