@@ -2,143 +2,185 @@
 
 > Updated: 2026-08-12
 >
-> Current milestone: **B — Minimal CA reference core**
+> Current milestone: **C — Wildfire data and behavior boundary**
 
 ## Current position
 
-The repository foundation is now established and PyFireCA has a working minimal synchronous cellular automaton. The project has moved from pure scaffold work into the first executable CA milestone.
-
-Current architecture:
+PyFireCA now has two stable layers:
 
 ```text
-RasterGrid
-   +
-FireState
-   +
-Neighborhood
-   +
-TransitionRule
-   ↓
-Simulation
+Milestone B
+CA reference core
+
+RasterGrid + FireState + Neighborhood + TransitionRule
+                         ↓
+                     Simulation
+
+Milestone C
+Behavior/data boundary
+
+EnvironmentalData
+      ↓
+model-specific behavior inputs
+      ↓
+FireBehaviorModel
+      ↓
+FireBehaviorResult
+      ↓
+future behavior-informed CA rule
 ```
 
-The first reference rule is intentionally simple and deterministic. It exists to validate the CA architecture before Rothermel/FBP fire-behavior equations are introduced.
+The project still intentionally avoids complete Rothermel/FBP equations at this point. The current goal is to make the contracts around those models explicit before scientific formulas are added.
 
 ## Completed
 
 ### Repository / engineering
 
-- Repository `hujinghaoabcd/PyFireCA` initialized.
-- English and Chinese README files created and updated with a runnable CA workflow.
-- `src/` package layout established.
-- `pyproject.toml` created with Python 3.11+, Hatchling, NumPy, optional GIS/dev dependencies, Ruff and pytest configuration.
-- `.gitignore` and pre-commit configuration added.
-- GitHub Actions CI added.
-- CI test matrix covers Python 3.11, 3.12, and 3.13.
-- `CITATION.cff`, `CHANGELOG.md`, and `CONTRIBUTING.md` added.
-- Detailed design, development, validation, status, and handoff documents created.
+- modern `src/` package layout;
+- `pyproject.toml` with Python 3.11+, Hatchling, NumPy, optional GIS/dev dependencies;
+- Ruff lint/format, pre-commit, pytest, coverage;
+- GitHub Actions CI for Python 3.11, 3.12, and 3.13;
+- English and Chinese README with runnable reference CA example;
+- `CITATION.cff`, `CHANGELOG.md`, `CONTRIBUTING.md`;
+- living design/development/status/handoff/validation documentation.
 
-### CA core
+### CA reference core
 
-- `FireState` enum:
-  - `UNBURNABLE`;
-  - `UNBURNED`;
-  - `BURNING`;
-  - `BURNED`.
-- state-array validation implemented;
-- `RasterGrid` implemented with shape/state validation and independent copying;
-- `Neighborhood` protocol established;
-- `MooreNeighborhood` implemented;
-- `VonNeumannNeighborhood` implemented;
-- clipped raster boundary semantics implemented for neighbor lookup;
-- synchronous `TransitionRule` protocol established;
-- synchronous `Simulation.step()` / `run()` implemented;
-- explicit `numpy.random.Generator` construction through `Simulation.from_seed()`;
-- `NeighborIgnitionRule` implemented as a transparent deterministic wildfire CA baseline;
-- runnable `examples/minimal.py` added.
+- `FireState` enum and array validation;
+- `RasterGrid` state/shape contract;
+- `Neighborhood` protocol;
+- Moore and Von Neumann neighborhoods;
+- clipped-boundary neighbor lookup;
+- synchronous `TransitionRule` contract;
+- explicit RNG through `numpy.random.Generator`;
+- `Simulation.step()` / `run()`;
+- deterministic `NeighborIgnitionRule` reference baseline;
+- explicit test that synchronous updates do not cascade within a single step.
 
-### Tests
+### Fire-behavior boundary
 
-Current test coverage includes:
+Implemented in `src/pyfireca/behavior/`:
 
-- state codes and validation;
-- Moore/Von Neumann neighborhood invariants;
-- boundary clipping;
-- grid shape/copy/replace-state behavior;
-- simulation state replacement and invalid rule output;
-- deterministic Moore/Von Neumann ignition behavior;
-- unburnable-cell preservation;
-- explicit test that synchronous updates do not cascade within one time step.
+- generic `FireBehaviorModel[InputT]` protocol;
+- immutable `FireBehaviorResult`;
+- required common `spread_rate_m_s`;
+- optional `spread_direction_deg`;
+- optional `fireline_intensity_w_m`;
+- optional `flame_length_m`;
+- optional model-specific scalar diagnostics;
+- finite/non-negative validation where scientifically appropriate;
+- direction convention fixed to degrees clockwise from geographic north in `[0, 360)`.
 
-The Python 3.11/3.12/3.13 test jobs have passed in CI. Initial quality-job failures were formatting-only issues caught by Ruff and were corrected. The latest documentation-only CI run is being used as the final bootstrap verification.
+Important design decision: Rothermel and FBP are **not** forced to share one oversized input dataclass. Each model may define its own strongly typed inputs while returning the same CA-facing `FireBehaviorResult`.
+
+### Environmental data boundary
+
+Implemented in `src/pyfireca/data.py`:
+
+- `SpatialLayer` for static `(Y, X)` arrays;
+- `SpatialLayer` for dynamic `(T, Y, X)` arrays;
+- optional `units` metadata;
+- optional `nodata` metadata;
+- uniform `at(time_index)` access;
+- `EnvironmentalData` named layer collection;
+- shared spatial-shape validation;
+- shared dynamic time-length validation;
+- aligned `snapshot(time_index)` output.
+
+The initial temporal contract uses integer time indices only. Physical datetimes/interpolation are intentionally deferred until a concrete weather-data integration is implemented.
+
+### Documentation added in Milestone C
+
+- `docs/BEHAVIOR_DATA_CONTRACT.md` — exact behavior/data interface, unit policy, direction convention, NoData policy, temporal design, and deferred items;
+- `docs/DESIGN.md` updated with decisions D007/D008;
+- `docs/DEVELOPMENT.md` updated to reflect Milestone C progress.
+
+### Tests / CI
+
+New tests cover:
+
+- valid/invalid `FireBehaviorResult` values;
+- model-specific input compatibility through a dummy behavior implementation;
+- static/dynamic `SpatialLayer` behavior;
+- invalid layer dimensions/dtypes;
+- environmental spatial alignment;
+- dynamic time-length alignment;
+- missing layer errors;
+- static + dynamic snapshot behavior.
+
+After Ruff-driven style corrections, the latest quality job passes lint, format checking, and tests. Python 3.12/3.13 jobs are green; Python 3.11 tests also passed and the workflow was completing its final cleanup at the last check.
 
 ## Key decisions now implemented
 
-1. **Synchronous update semantics are explicit.** A rule computes a complete next-state array from the current grid, then `Simulation` applies it.
-2. **Current boundary policy is clipping.** Off-grid neighbors are omitted. Periodic/padded policies are deferred.
-3. **Neighborhood is replaceable independently of the simulation loop.**
-4. **The first reference rule contains no fire-behavior physics.** This keeps CA mechanics independently testable.
-5. **NumPy remains the reference path.** No Numba optimization has been introduced yet.
+1. **CA propagation and fire behavior stay separate.**
+2. **Behavior outputs are standardized; model-native inputs are not artificially unified.**
+3. **Common behavior quantities use explicit SI-derived units in field names.**
+4. **Common spread direction is clockwise from geographic north.**
+5. **Environmental data remain array-first and lightweight.**
+6. **Static `(Y, X)` and dynamic `(T, Y, X)` data share one access pattern.**
+7. **Physical time interpolation is deferred rather than guessed.**
+8. **NoData is metadata only at this stage; the numerical kernel does not silently impute missing data.**
+9. **NumPy remains the scientific reference path.**
 
 ## Not implemented yet
+
+### Milestone C remaining work
+
+- first real model-specific behavior input dataclass;
+- initial fuel representation;
+- first scientifically validated fire-behavior implementation;
+- GIS CRS / transform / extent alignment validation;
+- optional Rasterio read/write adapter;
+- explicit mapping from GIS NoData to wildfire/unburnable state;
+- physical weather time-coordinate policy.
 
 ### CA research extensions
 
 - probabilistic rule;
-- radius/directional/adaptive neighborhood variants;
+- directional/adaptive neighborhoods;
 - asynchronous/event-driven scheduler;
 - sparse/active-cell update representation;
-- distance-accumulation / Cell2Fire-like rule.
+- distance accumulation / Cell2Fire-like rule.
 
-### Wildfire science
+### Wildfire processes
 
-- common fire-behavior result contract;
-- fuel representation;
-- Rothermel model;
-- FBP model;
-- moisture/environment coupling;
+- validated Rothermel implementation;
+- validated FBP implementation;
 - arrival time;
 - crown fire;
 - spotting;
-- suppression.
+- suppression;
+- Monte Carlo experiment layer.
 
-### GIS/data
+### Scientific validation
 
-- static/dynamic layer containers;
-- Rasterio read/write adapter;
-- raster alignment contract implementation;
-- YAML run configuration;
-- GeoTIFF outputs.
-
-### Validation
-
-- deterministic regression artifact beyond unit-scale cases;
-- scientific fire-behavior reference cases;
-- Cell2Fire comparison scenarios;
-- grid/time-step/directional-bias experiments.
+- independent Rothermel/FBP reference calculations;
+- Cell2Fire controlled comparison scenarios;
+- grid-size/time-step sensitivity;
+- directional/lattice-bias experiments.
 
 ## Scope boundaries that remain fixed
 
-- PyFireCA is a wildfire CA project, not an urban CA product.
-- UrbanVCA/PLUS/intPLUS/Mesa-Geo remain engineering references only.
-- PyTorchFire/differentiable CA is deferred.
-- Level Set and front-tracking propagation are comparison methods, not core implementations.
-- Fire behavior and CA transition mechanics must remain separate.
-- GIS I/O must remain outside numerical CA kernels.
-- Do not create plugin/backend/platform abstractions until a concrete need appears.
+- PyFireCA is wildfire-specific, not an urban CA product.
+- UrbanVCA / PLUS / intPLUS / Mesa-Geo remain engineering references only.
+- PyTorchFire-style differentiable CA remains deferred.
+- Level Set / front tracking remain comparison methods, not core engines.
+- GIS file I/O stays outside numerical CA kernels.
+- Do not introduce plugin/backend/platform abstractions without a concrete requirement.
 
 ## Immediate next target
 
-The next implementation target is **the wildfire data/behavior boundary**, not a complex spread model yet:
+The next implementation target is to select and formalize the **first real behavior-model input contract and fuel representation** before adding a full equation set.
+
+Recommended order:
 
 ```text
-FireBehaviorResult
-      ↓
-FireBehaviorModel protocol
-      ↓
-minimal environmental data contract
-      ↓
-reference behavior tests
+1. choose first reference behavior family
+2. define its typed input dataclass
+3. define fuel-model representation needed by that family
+4. document source variables + units
+5. add validation/reference fixtures
+6. then implement equations
 ```
 
-Before implementing complete Rothermel/FBP equations, define units, return fields, and validation strategy so both models can plug into the same CA rule without special-case branches.
+For a Cell2Fire-oriented research line, FBP is strategically important; for a simpler independent surface-fire reference path, Rothermel is also useful. The choice should be made based on which reference calculations can be validated most rigorously first, not on implementation convenience alone.
