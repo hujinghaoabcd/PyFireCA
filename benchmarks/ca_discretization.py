@@ -25,7 +25,11 @@ from pyfireca.behavior import (
     get_standard_fuel_model,
 )
 from pyfireca.behavior._units import ft_min_to_m_s
-from pyfireca.evaluation import ArrivalErrorMetrics, analytical_ellipse_arrival_times, arrival_error_metrics
+from pyfireca.evaluation import (
+    ArrivalErrorMetrics,
+    analytical_ellipse_arrival_times,
+    arrival_error_metrics,
+)
 from pyfireca.neighborhood import MooreNeighborhood, Neighborhood, VonNeumannNeighborhood
 
 
