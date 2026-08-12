@@ -62,50 +62,71 @@ Goal: establish the scientific-software skeleton before implementing wildfire eq
 - [x] English/Chinese landing README initialized;
 - [x] `pyproject.toml` initialized;
 - [x] detailed design document initialized;
-- [ ] state model;
-- [ ] raster grid model;
-- [ ] neighborhood interface;
-- [ ] minimal tests;
-- [ ] CI;
-- [ ] pre-commit;
-- [ ] status/handoff/validation documents;
-- [ ] RepoForge configuration;
+- [x] state model;
+- [x] raster grid model;
+- [x] neighborhood interface;
+- [x] minimal tests;
+- [x] CI;
+- [x] pre-commit;
+- [x] status/handoff/validation documents;
+- [ ] RepoForge managed-header migration.
+
+The RepoForge item is intentionally deferred rather than approximated by hand. The current README already contains project-specific scientific prose. When RepoForge is applied, initialize it as `scientific-python / standard`, review the generated diff, and migrate only the stable managed header regions so the hand-written README body remains user-owned.
+
+Recommended reviewed workflow:
+
+```bash
+repoforge init . \
+  --type scientific-python \
+  --profile standard \
+  --name PyFireCA \
+  --repository-url https://github.com/hujinghaoabcd/PyFireCA
+
+repoforge diff . --config repoforge.yml
+repoforge apply . --config repoforge.yml --dry-run
+```
+
+Because the repository already has an unmarked README, do not use `--force` until the migration diff has been reviewed carefully.
 
 ### Milestone B — minimal CA reference core
 
 Goal: run a small CA without wildfire-specific fire-behavior equations.
 
-- [ ] `FireState` enum and state validation;
-- [ ] `RasterGrid` shape/state contract;
-- [ ] Moore neighborhood;
-- [ ] Von Neumann neighborhood;
-- [ ] boundary-safe neighbor indexing;
-- [ ] abstract/minimal transition-rule contract;
-- [ ] synchronous simulation step;
-- [ ] explicit `numpy.random.Generator`;
-- [ ] deterministic regression fixture;
-- [ ] minimal example.
+- [x] `FireState` enum and state validation;
+- [x] `RasterGrid` shape/state contract;
+- [x] Moore neighborhood;
+- [x] Von Neumann neighborhood;
+- [x] boundary-safe neighbor indexing;
+- [x] abstract/minimal transition-rule contract;
+- [x] synchronous simulation step;
+- [x] explicit `numpy.random.Generator`;
+- [x] deterministic regression/reference fixtures;
+- [x] minimal runnable example.
 
-Exit criterion: a small raster CA can execute reproducibly and all behavior is covered by tests.
+Exit criterion: **met for the architectural reference core.** A small raster CA executes reproducibly, neighborhood substitution is tested, and synchronous no-cascade semantics are explicit. This milestone does not claim physically realistic wildfire behavior.
 
 ### Milestone C — wildfire data and behavior boundary
 
-Goal: establish data contracts before complete fire spread.
+**Current implementation target.** Establish common data and behavior contracts before adding complete spread equations.
 
+- [ ] define SI-unit policy and document any source-model conversion boundaries;
+- [ ] common `FireBehaviorResult` type;
+- [ ] behavior base protocol;
+- [ ] minimal environmental input contract;
 - [ ] static landscape layers;
 - [ ] dynamic environmental layers;
-- [ ] common fire-behavior result type;
-- [ ] behavior base protocol/ABC;
 - [ ] initial fuel representation;
+- [ ] reference tests for behavior contracts;
 - [ ] GIS alignment validation;
-- [ ] optional Rasterio I/O;
-- [ ] reference calculations for behavior modules.
+- [ ] optional Rasterio I/O.
 
-### Milestone D — first wildfire CA rule
+The common behavior interface must be designed before implementing Rothermel or FBP so both can feed CA transition rules without model-name branches in `Simulation`.
 
-Goal: implement one transparent spread rule that exercises the architecture.
+### Milestone D — first behavior-informed wildfire CA rule
 
-- [ ] ignition representation;
+Goal: implement one transparent spread rule that consumes the common fire-behavior output.
+
+- [ ] ignition representation beyond the architectural baseline;
 - [ ] active burning cells / propagation state;
 - [ ] CA rule consuming behavior output;
 - [ ] arrival-time output;
@@ -113,7 +134,7 @@ Goal: implement one transparent spread rule that exercises the architecture.
 - [ ] regression case;
 - [ ] scientific validation case.
 
-The first rule should be simple enough to validate. Do not begin by reproducing every Cell2Fire feature.
+The existing `NeighborIgnitionRule` is an architectural baseline, not the scientific rule targeted by this milestone.
 
 ### Milestone E — Cell2Fire-like distance rule
 
@@ -126,23 +147,35 @@ Goal: reproduce the important CA propagation concept in a modular form.
 - [ ] characterize time-step / grid effects;
 - [ ] document differences rather than claiming exact equivalence prematurely.
 
-### Milestone F — Rothermel and richer wildfire processes
+### Milestone F — Rothermel / FBP and richer wildfire processes
 
-- [ ] Rothermel surface behavior;
+The exact order of Rothermel and FBP implementation should follow the validation/reference material available when Milestone C is complete.
+
+- [ ] validated surface-fire behavior implementation;
+- [ ] second interchangeable fire-behavior implementation;
 - [ ] moisture inputs;
 - [ ] optional crown-fire extension after surface validation;
 - [ ] spotting design after core spread is stable;
 - [ ] suppression/firebreak design after propagation invariants are stable.
 
-### Milestone G — performance
+### Milestone G — Monte Carlo and experiment layer
 
-Only after profiling:
+- [ ] explicit independent RNG stream strategy;
+- [ ] scenario/run configuration;
+- [ ] batch/ensemble execution without coupling to the CA kernel;
+- [ ] metrics aggregation;
+- [ ] reproducibility metadata;
+- [ ] controlled sensitivity experiments.
 
-- [ ] benchmark representative grid sizes;
+### Milestone H — performance
+
+Only after profiling representative simulations:
+
+- [ ] benchmark representative grid sizes and active-cell fractions;
 - [ ] identify Python/NumPy hotspots;
 - [ ] introduce Numba selectively;
 - [ ] verify optimized/reference equivalence;
-- [ ] record performance methodology.
+- [ ] record performance methodology and hardware metadata.
 
 ## 5. Code-style rules
 
@@ -189,6 +222,8 @@ dev: pytest, pytest-cov, ruff, pre-commit
 
 Do not add a dependency because a reference project uses it. Every dependency must solve a concrete PyFireCA requirement.
 
+Prefer optional dependencies for GIS/documentation/benchmark tooling when the CA core does not require them at import time.
+
 ## 7. Scientific implementation workflow
 
 For each scientific component:
@@ -196,11 +231,12 @@ For each scientific component:
 ```text
 1. identify source/reference equations
 2. document assumptions and units
-3. implement a readable reference version
-4. add unit/reference tests
-5. add integration test
-6. compare with independent/reference implementation where possible
-7. only then optimize
+3. define input/output contract
+4. implement a readable reference version
+5. add unit/reference tests
+6. add integration test
+7. compare with independent/reference implementation where possible
+8. only then optimize
 ```
 
 A fast implementation without an independently checkable reference path is not considered complete.
@@ -219,6 +255,8 @@ Environmental coupling?
 
 Do not label a whole model as new when the actual methodological change can be represented as one component. This keeps ablation and comparison experiments clean.
 
+A research comparison should preferably reuse the same grid, input data, behavior model, metrics, and experiment runner while replacing only the CA component under study.
+
 ## 9. Documentation policy
 
 README is a landing page. Detailed derivations, design rationale, experiments, validation tables, and developer instructions belong in `docs/`.
@@ -232,6 +270,8 @@ Every public feature should eventually have:
 - tests;
 - validation evidence when scientifically meaningful.
 
+Development-stage documents are not release-history dumps. `STATUS.md` describes current truth; `HANDOFF.md` explains how to continue; `CHANGELOG.md` records externally meaningful changes.
+
 ## 10. Release policy
 
 Pre-1.0 releases may change APIs, but changes should still be recorded in `CHANGELOG.md` and architecture decisions documented.
@@ -239,7 +279,7 @@ Pre-1.0 releases may change APIs, but changes should still be recorded in `CHANG
 Suggested progression:
 
 ```text
-0.1.x  reference CA core + first wildfire rule
+0.1.x  reference CA core + common behavior/data contracts
 0.2.x  validated fire behavior + GIS workflow
 0.3.x  Cell2Fire-like reproduction/comparison
 0.4.x  richer processes + Monte Carlo
