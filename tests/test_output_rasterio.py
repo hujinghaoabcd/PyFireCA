@@ -44,6 +44,16 @@ def test_write_static_simulation_outputs_round_trips_rasters_and_metrics(tmp_pat
     assert burned.tolist() == [[1, 1], [0, 1]]
     assert burned_meta.nodata is None
 
+    perimeter = json.loads(paths.perimeter.read_text(encoding="utf-8"))
+    assert perimeter["type"] == "FeatureCollection"
+    assert len(perimeter["features"]) == 1
+    feature = perimeter["features"][0]
+    assert feature["properties"] == {"burned": 1}
+    assert feature["geometry"]["type"] == "Polygon"
+    first_lon, first_lat = feature["geometry"]["coordinates"][0][0]
+    assert 14.0 < first_lon < 16.0
+    assert 40.0 < first_lat < 42.0
+
     metrics = json.loads(paths.metrics.read_text(encoding="utf-8"))
     assert metrics["domain_cell_count"] == 3
     assert metrics["burned_cell_count"] == 3
