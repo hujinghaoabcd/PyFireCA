@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from math import isfinite
-from typing import Mapping, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
 InputT = TypeVar("InputT", contravariant=True)
 
@@ -58,11 +59,10 @@ class FireBehaviorResult:
         _validate_nonnegative_finite("flame_length_m", self.flame_length_m)
 
         direction = self.spread_direction_deg
-        if direction is not None:
-            if not isfinite(direction) or not 0.0 <= direction < 360.0:
-                raise ValueError(
-                    "spread_direction_deg must be finite and in [0, 360)"
-                )
+        if direction is not None and (
+            not isfinite(direction) or not 0.0 <= direction < 360.0
+        ):
+            raise ValueError("spread_direction_deg must be finite and in [0, 360)")
 
         for key, value in self.diagnostics.items():
             if not isinstance(key, str) or not key:
