@@ -1,6 +1,6 @@
 # Rothermel Reference Implementation Plan
 
-> Status: implementation/validation plan
+> Status: active implementation/validation plan
 >
 > Updated: 2026-08-12
 
@@ -32,7 +32,7 @@ CA transition rule
 
 ## 2. Primary scientific references
 
-The implementation should be derived from published equations and authoritative explanatory material rather than copied from another software package.
+The implementation is derived from published equations and authoritative explanatory material rather than copied from another software package.
 
 Primary references:
 
@@ -56,7 +56,7 @@ PyFireCA fixes the Rothermel fuel-class order as:
 5  LIVE_WOODY
 ```
 
-The six-class structure is chosen so the input contract can represent classic/static models as well as later dynamic Scott--Burgan-style fuel behavior without redesigning the public data structure.
+The six-class structure allows the public input contract to represent classic/static models and later dynamic Scott--Burgan-style behavior without redesigning the API.
 
 A model with no load in a class stores zero load. Physical particle properties for an unloaded class may also be zero because they do not participate in the calculation.
 
@@ -76,9 +76,20 @@ The PyFireCA public Rothermel contract uses SI units:
 | slope | degrees |
 | direction/aspect | degrees clockwise from geographic north |
 
-Published/reference implementations may use ft, lb, Btu, minutes, or other native conventions. Any legacy-unit conversion required by the reference equation implementation must be explicit, named, and tested.
+The published Rothermel correlations use US customary quantities such as feet, pounds, Btu, and minutes. PyFireCA therefore centralizes exact conversions in `src/pyfireca/behavior/_units.py` rather than scattering constants through scientific formulas.
 
-No conversion should depend on guessing a value's likely unit.
+Currently implemented and round-trip tested conversions cover:
+
+```text
+m ↔ ft
+kg/m² ↔ lb/ft²
+kg/m³ ↔ lb/ft³
+1/m ↔ 1/ft
+J/kg ↔ Btu/lb
+m/s ↔ ft/min
+```
+
+No conversion depends on guessing a value's likely unit.
 
 ## 5. Fuel-model contract
 
@@ -107,7 +118,7 @@ For burnable models:
 
 Nonburnable models may use zero-valued physical properties.
 
-The current class does not yet embed Anderson 13 or Scott--Burgan 40 lookup tables. Catalogue data should be added only after source values, unit conversions, tests, and citation provenance are prepared.
+The current class does not yet embed Anderson 13 or Scott--Burgan 40 lookup tables. Catalogue data are deferred until source values, conversions, provenance, and regression tests are prepared.
 
 ## 6. Moisture contract
 
@@ -123,9 +134,9 @@ live_woody_fraction
 
 `RothermelFuelMoisture.as_six_class_values()` expands them to the six-class order by initially assigning dead-herbaceous moisture from dead 1-h moisture.
 
-Live moisture values are allowed to exceed `1.0` because moisture expressed on a dry-mass basis can exceed 100 percent.
+Live moisture values are allowed to exceed `1.0` because dry-mass-basis moisture can exceed 100 percent.
 
-Dynamic herbaceous load transfer is **not implemented yet**. The `dynamic` flag only preserves the fuel-model capability needed for that later step.
+Dynamic herbaceous load transfer is **not implemented yet**. The `dynamic` flag only preserves the capability needed for that later step.
 
 ## 7. Wind and terrain conventions
 
@@ -142,8 +153,6 @@ aspect_deg
 
 The Rothermel input receives midflame wind directly. Conversion from 10-m or 20-ft wind using a wind-adjustment factor belongs in a separate explicit preprocessing/behavior utility.
 
-This keeps the Rothermel calculation independent of canopy/exposure assumptions that are not intrinsic to its basic input contract.
-
 ### Wind direction
 
 `wind_from_direction_deg` is a meteorological **from** direction:
@@ -155,46 +164,106 @@ This keeps the Rothermel calculation independent of canopy/exposure assumptions 
 270° wind from west
 ```
 
-Any conversion to a downwind/spread vector must be explicit in the equation implementation.
+Any conversion to downwind/spread direction must be explicit in the equation implementation.
 
 ### Slope and aspect
 
 - `slope_deg` is constrained to `[0, 90)`.
 - `aspect_deg` is clockwise from geographic north and constrained to `[0, 360)`.
 
-Image-row orientation must never be allowed to silently redefine geographic direction conventions.
+Raster row orientation must never silently redefine geographic direction conventions.
 
-## 8. Implementation stages
+## 8. R1 — implemented base fuel quantities
 
-Do not implement the model as one monolithic function.
+R1 is now partially implemented with small pure functions and hand-computable tests.
 
-Recommended sequence:
+### Surface-area weighting
 
-### R1 — unit conversion and base fuel quantities
+`compute_surface_area_weights()` implements the heterogeneous-fuel weighting structure based on per-class relative surface area proportional to:
 
-Implement/test explicit conversions needed by published equations and derive base quantities such as:
+```text
+SAV × oven-dry load / particle density
+```
 
-- net fuel load;
-- bulk density;
+It returns:
+
+- six within-category weights for dead/live fuel size classes;
+- two category weights for total dead vs live fuel surface area.
+
+The tests use an artificial three-loaded-class fuel bed so the expected fractions can be verified analytically rather than against another software package.
+
+### Characteristic SAV
+
+`compute_characteristic_sav_m_inv()` computes the surface-area-weighted characteristic SAV from the same dead/live and within-category weights.
+
+### Packing ratio
+
+`compute_packing_ratio()` computes occupied particle volume per fuel-bed volume from:
+
+```text
+sum(load / particle_density) / fuel-bed depth
+```
+
+### Oven-dry bulk density
+
+`compute_bulk_density_kg_m3()` computes total oven-dry load divided by fuel-bed depth.
+
+### Optimum packing ratio
+
+`compute_optimum_packing_ratio()` evaluates the published correlation after explicitly converting characteristic SAV from `1/m` to `1/ft`, because the correlation coefficients are tied to the legacy unit convention.
+
+### R1 validation status
+
+Tests currently cover:
+
+- exact dead/live surface-area weights for a hand-computable synthetic fuel bed;
+- characteristic SAV;
 - packing ratio;
-- optimum packing ratio;
-- weighted fuel characteristics.
+- bulk density;
+- optimum packing ratio at a known characteristic SAV input;
+- zero behavior for a nonburnable model;
+- invalid negative SAV rejection;
+- exact/round-trip unit conversions.
 
-### R2 — no-wind / no-slope surface spread
+The R1 tests pass in the Python 3.11/3.12/3.13 matrix. Quality failures encountered while adding them have been lint/format-only and are corrected as part of the same development pass.
 
-Implement/test the reaction and heat-transfer chain required for base surface ROS.
+## 9. R2 — no-wind / no-slope surface spread
 
-This gives a clean reference case before directional effects are introduced.
+R2 is deliberately **not implemented yet**.
+
+Before coding reaction intensity and base ROS, PyFireCA must reconcile which published equation variants constitute its reference behavior. The original 1972 model and later Albini/Andrews operational formulations are not identical in every intermediate expression.
+
+At minimum, R2 must explicitly resolve and document:
+
+- the Albini replacement for the reaction-velocity exponent/correlation used in later implementations;
+- the exact net-fuel-loading convention used by the selected reference formulation;
+- live moisture-of-extinction treatment;
+- dynamic herbaceous curing boundaries;
+- whether a given correction belongs to the core Rothermel reference or to a named later extension.
+
+Do **not** mix formulas from different vintages simply because they appear in existing software.
+
+The next implementation should first create authoritative numerical fixtures for the selected formulation, then add formula-level functions for:
+
+- mineral damping;
+- moisture damping;
+- net fuel loading;
+- reaction velocity/intensity;
+- propagating flux ratio;
+- effective heating number;
+- heat of preignition;
+- heat source/sink;
+- no-wind/no-slope ROS.
+
+## 10. Later implementation stages
 
 ### R3 — wind and slope effects
 
-Add wind and slope factors with explicit direction conventions.
-
-Separate vector/directional handling from scalar base ROS where practical.
+Add wind and slope factors only after R2 is independently validated. Directional/vector conventions must be tested separately from scalar base ROS.
 
 ### R4 — common PyFireCA output
 
-Return validated `FireBehaviorResult` values in SI units.
+Implement `RothermelModel.compute(RothermelInputs) -> FireBehaviorResult` with SI output.
 
 ### R5 — standard fuel catalogues
 
@@ -202,48 +271,46 @@ Add independently verified Anderson/Scott--Burgan catalogue data and conversion 
 
 ### R6 — behavior-informed CA integration
 
-Use Rothermel output from a CA rule without adding `if model == "rothermel"` logic to `Simulation`.
+Use Rothermel output from a CA rule without adding model-name branches to `Simulation`.
 
-## 9. Validation strategy
+## 11. Validation strategy
 
-Each equation stage should have tests at three levels:
+Each equation stage uses three levels where possible:
 
 ```text
-formula-level unit test
+formula-level test
         ↓
-complete reference calculation
+authoritative complete/reference calculation
         ↓
-independent implementation comparison
+independent software comparison
 ```
 
-Planned comparison sources include:
-
-- authoritative worked/reference values when available;
-- SimFire for an independent NumPy-oriented implementation path;
-- Pyretechnics for a richer multi-class implementation path.
+Independent software comparison paths include SimFire and Pyretechnics only when the compared assumptions/variants are scientifically equivalent.
 
 Differences must be diagnosed rather than hidden by loose tolerances. Potential causes include:
 
+- equation vintage/correction set;
 - unit conversion;
 - wind convention;
 - wind adjustment;
 - dynamic-fuel handling;
-- Albini/Behave-era corrections;
+- live moisture-of-extinction treatment;
 - directional projection assumptions.
 
-## 10. License / provenance rule
+## 12. License / provenance rule
 
-PyFireCA's Rothermel implementation must be an independent implementation of published scientific equations.
+PyFireCA's Rothermel implementation is an independent implementation of published scientific equations.
 
-Do not copy source text from reference software with incompatible or different licensing. When a reference implementation reveals a discrepancy, return to the scientific reference, document the interpretation, and add a test that captures the resolved behavior.
+Do not copy source text from reference software with different licensing. When a reference implementation reveals a discrepancy, return to the scientific reference, document the interpretation, and add a test capturing the resolved behavior.
 
-## 11. Explicitly deferred
+## 13. Explicitly deferred
 
-Not yet part of the Rothermel implementation:
+Not yet implemented:
 
-- equation chain itself;
+- complete no-wind/no-slope equation chain;
+- wind/slope equation chain;
 - standard fuel catalogue constants;
-- dynamic herbaceous curing calculation;
+- dynamic herbaceous curing;
 - live moisture-of-extinction calculation;
 - canopy wind-adjustment factors;
 - crown fire;
@@ -251,4 +318,4 @@ Not yet part of the Rothermel implementation:
 - ellipse/wavelet propagation;
 - CA distance accumulation.
 
-These should be added incrementally and validated independently.
+These are added incrementally and independently validated.
