@@ -10,7 +10,7 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 
 - Initial English and Chinese project README files.
 - Modern `pyproject.toml` using a `src/` layout and Hatchling build backend.
-- Living design, development, status, validation, handoff, behavior/data, GIS, and Rothermel reference documentation.
+- Living design, development, status, validation, handoff, behavior/data, GIS, Rothermel, and static-raster workflow documentation.
 - Explicit wildfire `FireState` model and state-array validation.
 - `build_initial_state()` for explicit domain-mask and ignition-mask to canonical CA state conversion.
 - Moore and Von Neumann neighborhood implementations.
@@ -47,30 +47,47 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Explicit meteorological wind-from, downwind-push, downslope-aspect, upslope, and geographic-bearing conversion helpers in `_directions.py`.
 - Dedicated pinned Behave 7 non-collinear wind/slope maximum-ROS workflow.
 - Public `RothermelModel.compute(RothermelInputs) -> FireBehaviorResult` assembly, exported from `pyfireca.behavior`.
-- End-to-end Rothermel model tests for base, slope-only, wind-only, perpendicular wind+slope, optional high-wind limiting, dynamic-fuel rejection, and API type checks.
-- Rothermel diagnostics carrying base ROS, reaction intensity, characteristic SAV, packing ratios, wind/slope factors, effective wind, and wind-limit state.
+- Rothermel diagnostics carrying base ROS, reaction intensity, characteristic SAV, packing ratios, wind/slope factors, effective wind, dynamic transfer, and wind-limit state.
+- Operational Scott–Burgan dynamic herbaceous curing/load-transfer stage with pinned Grade B GR1 validation.
+- Audited standard-fuel catalogue API with pinned native-source records for FM1, FM2, and GR1.
+- Physical edge-distance / directional-ROS travel-time helpers in `pyfireca.propagation`.
+- `StaticArrivalTimeSolver` for static directional-edge earliest-arrival propagation.
+- `arrival_times_to_state()` for mapping physical arrival fields to canonical fire states using explicit burn duration.
+- North-up square-grid offset-to-geographic-bearing conversion.
+- Behave-aligned surface-fire length-to-width ratio, eccentricity, backing/flanking ROS, and `FromIgnitionPoint` arbitrary-angle ROS in `_surface_ellipse.py`.
+- Dedicated pinned R7 Behave workflow validating FM1 90° off-axis radial ROS at `5.2277130003983068 chains/h`.
+- `HomogeneousRothermelDirectionalSpreadRate` for validated directional neighbor ROS from one static Rothermel state.
+- `StaticSpatialRothermelDirectionalSpreadRate` for per-source-cell static heterogeneous behavior and cached ellipses.
+- `RothermelRasterLayerNames` and `StaticRasterRothermelInputsProvider` for strict raster-layer-to-typed-Rothermel assembly.
+- `build_static_raster_rothermel_arrival_solver()` as a thin `LandscapeInput` → static Rothermel arrival factory.
+- `docs/STATIC_RASTER_WORKFLOW.md` documenting layer names, units, NoData/domain semantics, grid geometry, and explicit non-goals.
+- `examples/static_raster_rothermel.py` demonstrating the in-memory raster → arrival → physical-time state workflow.
+- Example smoke testing through `tests/test_examples.py` so public examples fail CI when APIs drift.
 - Grade A Albini 1976 worked-example fixtures and pinned Grade B Behave 7 surface regression data with provenance/integrity checks.
 - GitHub Actions CI configuration covering quality checks, optional GIS tests, and Python 3.11/3.12/3.13.
 
 ### Changed
 
-- The official Behave reference workflow now uses stable `testSurface` regression cases instead of a fragile custom C++ wind-limit probe.
+- The official Behave reference workflow uses stable pinned regressions instead of the abandoned fragile custom C++ wind-limit probe.
 - Wind-limit validation is separated into an official Behave ROS-at-boundary regression and Python tests for enable/threshold/capping semantics.
+- When the optional wind limit is exceeded, `effective_wind_speed_m_s` now reports the limited effective wind so the surface ellipse uses the operationally capped wind state.
 - Zero-wind/zero-slope `RothermelModel` results return `spread_direction_deg=None` rather than inventing a directional head-fire bearing.
 - Rothermel fireline intensity and flame length remain unset in the common output until their output equations are separately validated.
+- Static physical propagation now consumes direction-specific edge ROS instead of implicitly assigning maximum/head ROS to every neighbor.
+- The public static raster workflow now fails closed on rotated, sheared, rectangular, or affine/cell-size-mismatched grids rather than approximating physical edge geometry.
 
 ### Design decisions
 
 - Product scope is wildfire CA rather than generic urban/geospatial CA.
 - NumPy is the reference implementation; optimization is deferred until profiling.
-- Fire-behavior equations remain separate from CA propagation rules.
+- Fire-behavior equations remain separate from CA propagation rules and event scheduling.
 - Behavior-model outputs are standardized while model-native inputs remain strongly typed and model-specific.
 - Common behavior quantities crossing the CA boundary use explicit SI-derived units.
 - Environmental data remain array-first; physical time interpolation and xarray/Zarr abstractions are deferred until required.
 - NoData remains metadata until a workflow explicitly selects static layers that define the persistent simulation domain.
 - Dynamic weather/moisture NoData cannot silently create permanent `UNBURNABLE` cells.
 - Required environmental snapshots use an explicit fail-fast completeness check; automatic interpolation/filling remains an external preprocessing decision.
-- `LandscapeInput` owns one shared geospatial metadata object while evolving state remains in `RasterGrid`/`Simulation`.
+- `LandscapeInput` owns one shared geospatial metadata object while evolving state remains in the propagation/simulation layer.
 - State GeoTIFF output uses model state `UNBURNABLE=0` rather than conflating model state with file-level NoData.
 - GIS preprocessing may transform inputs intentionally; CA simulation never silently reprojects/resamples/alters its grid.
 - Rothermel is the first behavior reference implementation; FBP remains planned for later comparison work.
@@ -78,9 +95,15 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Rothermel receives midflame wind explicitly; canopy/exposure wind-adjustment logic is kept outside the core model input.
 - Unit conversion and R1 weighting/base calculations are separated from the R2 reaction/heat-transfer chain.
 - The R2 reference variant is explicitly **Albini-adjusted Rothermel** rather than an unlabelled mixture of original Rothermel 1972 and later operational corrections.
-- Static heterogeneous R2 base ROS is now independently validated against pinned official Behave 7 cases before wind/slope assembly.
+- Static heterogeneous R2 base ROS is independently validated against pinned official Behave 7 cases before wind/slope assembly.
 - Non-collinear wind and slope are vector-combined; scalar `1 + phi_w + phi_s` is used only where effects are explicitly collinear.
 - Meteorological wind-from direction is converted explicitly to a downwind fire-push direction before vector composition.
 - The operational wind-speed limit is an explicit option and is disabled by default.
+- Physical travel time is `distance / direction-specific ROS`; one synchronous CA step has no hidden physical duration.
+- Off-axis arrival propagation uses the pinned Behave/Catchpole `FromIgnitionPoint` ellipse path, not a cosine projection and not `FromPerimeter` rates.
+- The first heterogeneous edge baseline is **source-cell controlled outgoing ROS**; source/target averaging is reserved for explicit named research variants.
+- Static raster input units are strict and never silently converted.
+- NoData outside the simulation domain is permitted; required behavior NoData/non-finite values inside the domain fail fast.
+- Static Dijkstra-style arrival and cached static providers are not mutated to imitate time-varying weather.
 - External validation values carry evidence grades and pinned provenance.
 - PyTorch/JAX/differentiable CA remain outside the current development scope.
