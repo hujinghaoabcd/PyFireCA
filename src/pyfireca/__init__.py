@@ -9,10 +9,14 @@ from pyfireca.arrival import (
 from pyfireca.behavior.crown import CruzCrownFireModel, CruzCrownInputs
 from pyfireca.behavior.fbp import FBPComputation, FBPInputs, FBPModel
 from pyfireca.behavior.fbp_directional import HomogeneousFBPDirectionalSpreadRate
+from pyfireca.behavior.fbp_landscape import build_static_raster_fbp_arrival_solver
+from pyfireca.behavior.fbp_layers import FBPRasterLayerNames, StaticRasterFBPInputsProvider
+from pyfireca.behavior.fbp_spatial import StaticSpatialFBPDirectionalSpreadRate
 from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_arrival_solver
 from pyfireca.config import StaticRasterInputPaths, StaticRunConfig, load_static_run_config
 from pyfireca.data import LandscapeInput
 from pyfireca.edge_coupling import HalfCellInterfaceDirectionalSpreadRate
+from pyfireca.fbp_simulator import StaticFBPSimulationRequest, run_static_fbp_simulation
 from pyfireca.grid import RasterGrid
 from pyfireca.ignition import IgnitionEvent, build_ignition_times
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
@@ -40,6 +44,7 @@ __all__ = [
     "FBPComputation",
     "FBPInputs",
     "FBPModel",
+    "FBPRasterLayerNames",
     "FireState",
     "HalfCellInterfaceDirectionalSpreadRate",
     "HomogeneousFBPDirectionalSpreadRate",
@@ -50,18 +55,23 @@ __all__ = [
     "RasterGrid",
     "Simulation",
     "StaticArrivalTimeSolver",
+    "StaticFBPSimulationRequest",
+    "StaticRasterFBPInputsProvider",
     "StaticRasterInputPaths",
     "StaticRunArtifacts",
     "StaticRunConfig",
     "StaticSimulationOutputPaths",
+    "StaticSpatialFBPDirectionalSpreadRate",
     "StaticWildfireSimulationRequest",
     "StaticWildfireSimulationResult",
     "VonNeumannNeighborhood",
     "arrival_times_to_state",
     "build_ignition_times",
+    "build_static_raster_fbp_arrival_solver",
     "build_static_raster_rothermel_arrival_solver",
     "load_static_run_config",
     "run_static_config",
+    "run_static_fbp_simulation",
     "run_static_wildfire_simulation",
     "terminal_state_from_result",
     "validate_static_run",

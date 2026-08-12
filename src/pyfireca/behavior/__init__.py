@@ -21,6 +21,9 @@ from pyfireca.behavior.fbp_directional import (
     FBPEllipse,
     HomogeneousFBPDirectionalSpreadRate,
 )
+from pyfireca.behavior.fbp_landscape import build_static_raster_fbp_arrival_solver
+from pyfireca.behavior.fbp_layers import FBPRasterLayerNames, StaticRasterFBPInputsProvider
+from pyfireca.behavior.fbp_spatial import StaticSpatialFBPDirectionalSpreadRate
 from pyfireca.behavior.fuel_catalog import (
     StandardFuelModelRecord,
     available_standard_fuel_model_numbers,
@@ -52,6 +55,7 @@ __all__ = [
     "FBPFireType",
     "FBPInputs",
     "FBPModel",
+    "FBPRasterLayerNames",
     "FireBehaviorModel",
     "FireBehaviorResult",
     "FuelClass",
@@ -64,9 +68,12 @@ __all__ = [
     "RothermelModel",
     "RothermelRasterLayerNames",
     "StandardFuelModelRecord",
+    "StaticRasterFBPInputsProvider",
     "StaticRasterRothermelInputsProvider",
+    "StaticSpatialFBPDirectionalSpreadRate",
     "StaticSpatialRothermelDirectionalSpreadRate",
     "available_standard_fuel_model_numbers",
+    "build_static_raster_fbp_arrival_solver",
     "build_static_raster_rothermel_arrival_solver",
     "cruz_active_crown_ros_m_min",
     "cruz_passive_crown_ros_m_min",
