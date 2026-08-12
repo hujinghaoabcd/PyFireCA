@@ -74,7 +74,7 @@ def test_multiple_external_ignitions_take_the_earliest_reachable_time() -> None:
 
     arrival = solver.solve(domain, ignition)
 
-    assert arrival.tolist() == pytest.approx([0.0, 10.0, 20.0, 15.0, 5.0])
+    assert arrival[0].tolist() == pytest.approx([0.0, 10.0, 20.0, 15.0, 5.0])
 
 
 def test_zero_edge_ros_leaves_unseeded_cells_unreachable() -> None:
