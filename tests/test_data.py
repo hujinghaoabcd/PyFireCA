@@ -45,9 +45,7 @@ def test_environmental_data_validates_alignment_and_time_size() -> None:
     wind = SpatialLayer(np.ones((4, 2, 3), dtype=float), units="m/s")
     moisture = SpatialLayer(np.ones((4, 2, 3), dtype=float), units="fraction")
 
-    data = EnvironmentalData(
-        {"fuel": fuel, "wind_speed": wind, "fuel_moisture": moisture}
-    )
+    data = EnvironmentalData({"fuel": fuel, "wind_speed": wind, "fuel_moisture": moisture})
 
     assert data.spatial_shape == (2, 3)
     assert data.time_size == 4
