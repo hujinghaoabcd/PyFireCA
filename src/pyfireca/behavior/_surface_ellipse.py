@@ -78,9 +78,7 @@ def compute_flanking_spread_rate_m_s(
     _require_finite_nonnegative("backing_spread_rate_m_s", backing_spread_rate_m_s)
     if not isfinite(length_to_width_ratio) or length_to_width_ratio < 1.0:
         raise ValueError("length_to_width_ratio must be finite and at least 1")
-    return (head_spread_rate_m_s + backing_spread_rate_m_s) / (
-        2.0 * length_to_width_ratio
-    )
+    return (head_spread_rate_m_s + backing_spread_rate_m_s) / (2.0 * length_to_width_ratio)
 
 
 def build_surface_fire_ellipse(
