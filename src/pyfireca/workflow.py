@@ -50,6 +50,7 @@ class StaticRunArtifacts:
     metadata: Path
     environment: Path
     metrics: Path
+    log: Path
     outputs: StaticSimulationOutputPaths
 
 
@@ -169,6 +170,19 @@ def _environment_metadata() -> dict[str, object]:
     }
 
 
+def _run_log(result: StaticWildfireSimulationResult) -> str:
+    metrics = result.summary_metrics()
+    lines = [
+        "PyFireCA static run completed",
+        f"burned_cell_count={metrics['burned_cell_count']}",
+        f"burned_area_m2={metrics['burned_area_m2']}",
+        f"first_arrival_s={metrics['first_arrival_s']}",
+        f"last_arrival_s={metrics['last_arrival_s']}",
+        f"runtime_s={metrics['runtime_s']}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def run_static_config(
     config: StaticRunConfig,
 ) -> tuple[StaticWildfireSimulationResult, StaticRunArtifacts]:
@@ -190,6 +204,7 @@ def run_static_config(
     metadata_path = run_directory / "metadata.json"
     environment_path = run_directory / "environment.json"
     metrics_path = run_directory / "metrics.json"
+    log_path = run_directory / "log.txt"
 
     resolved_config_path.write_text(
         yaml.safe_dump(config.to_dict(), sort_keys=False),
@@ -212,6 +227,7 @@ def run_static_config(
         json.dumps(result.summary_metrics(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    log_path.write_text(_run_log(result), encoding="utf-8")
     output_paths = write_static_simulation_outputs(result, run_directory / "outputs")
 
     return result, StaticRunArtifacts(
@@ -220,5 +236,6 @@ def run_static_config(
         metadata=metadata_path,
         environment=environment_path,
         metrics=metrics_path,
+        log=log_path,
         outputs=output_paths,
     )
