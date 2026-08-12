@@ -57,7 +57,7 @@ def test_heat_content_conversion_round_trip() -> None:
 
 
 def test_reaction_intensity_conversion_round_trip() -> None:
-    assert BTU_FT2_MIN_TO_W_M2 == pytest.approx(189.2754447037829, rel=1e-14)
+    assert pytest.approx(189.2754447037829, rel=1e-14) == BTU_FT2_MIN_TO_W_M2
     assert btu_ft2_min_to_w_m2(1.0) == pytest.approx(BTU_FT2_MIN_TO_W_M2)
     assert w_m2_to_btu_ft2_min(BTU_FT2_MIN_TO_W_M2) == pytest.approx(1.0)
 
