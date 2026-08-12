@@ -3,9 +3,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-rasterio = pytest.importorskip("rasterio")
-
 from pyfireca.gis import RasterMetadata, read_raster, write_raster
+
+rasterio = pytest.importorskip("rasterio")
 
 
 def _metadata() -> RasterMetadata:
