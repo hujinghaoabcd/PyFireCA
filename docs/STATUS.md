@@ -2,11 +2,11 @@
 
 > Updated: 2026-08-13
 >
-> Current milestone: **S8/S9 — static baseline simulator release polish**
+> Current milestone: **S9 — static baseline release candidate**
 
 ## Current position
 
-PyFireCA now has a complete first-pass static simulator path rather than only a scientific kernel:
+PyFireCA now has a complete first-pass static wildfire simulator, not only a scientific kernel:
 
 ```text
 YAML configuration
@@ -30,20 +30,41 @@ GeoTIFF + WGS84 GeoJSON outputs
 resolved config + hashes + metadata + metrics + log
 ```
 
-The user can now drive the same baseline from either the Python API or:
+User entry points:
 
 ```bash
 pyfireca validate run.yml
 pyfireca run run.yml
 ```
 
-The current priority is **release-quality baseline completion**. New PyFireCA-specific CA innovations remain recorded in `docs/FUTURE_RESEARCH.md` and are not being implemented until the simple simulator baseline is frozen.
+The implementation priority is no longer feature completion. The code baseline is at **release-candidate readiness**; new PyFireCA-specific CA innovations remain frozen in `docs/FUTURE_RESEARCH.md` until the baseline release gate is closed.
 
-## Baseline capabilities now implemented
+## Release-candidate summary
 
-### 1. CA reference core
+Implemented and tested:
 
-Available and tested:
+```text
+synchronous CA architecture reference
+static physical arrival solver
+strict GIS/data contracts
+Albini-adjusted Rothermel R1–R5
+Behave/Catchpole off-axis surface spread
+Anderson FM1–FM13 + Scott–Burgan GR1
+heterogeneous static raster behavior
+single/multiple/delayed ignition
+programmatic simulator API
+version-1 YAML
+validate/run CLI
+reproducible run directory
+GeoTIFF + GeoJSON outputs
+input SHA-256 + fuel provenance
+```
+
+## Scientific baseline
+
+### CA reference path
+
+Available:
 
 ```text
 FireState
@@ -55,9 +76,9 @@ NeighborIgnitionRule
 Simulation
 ```
 
-The original synchronous reference path remains step-count based. It has no hidden physical `dt`.
+The synchronous reference remains step-count based and has no hidden physical `dt`.
 
-### 2. Physical static arrival baseline
+### Physical arrival path
 
 Available:
 
@@ -68,179 +89,83 @@ square-grid distance/bearing helpers
 direction-specific edge travel time
 ```
 
-Physical propagation contract:
+Contract:
 
 ```text
 travel_time = physical_edge_distance / direction_specific_ROS
 ```
 
-Long-range neighborhoods are not silently accepted by the physical arrival baseline because they could skip intermediate barriers.
+The physical baseline uses immediate-neighbor edges so a larger neighborhood cannot silently skip an intermediate barrier.
 
-### 3. Fire-behavior/data/GIS contracts
+### Heterogeneous edge semantics
 
-Implemented:
+Current default:
 
-```text
-FireBehaviorModel
-FireBehaviorResult
-SpatialLayer
-EnvironmentalData
-LandscapeInput
-RasterMetadata
-validate_raster_alignment
-read_raster / write_raster
-write_state_raster
-NoData/domain validation
-```
+> **The source cell controls outgoing edge ROS.**
 
-Static domain semantics are explicit. Missing dynamic/static behavior data never silently become a different permanent fire state.
+Source/target averaging, half-cell coupling, interface resistance, and adaptive edge rules remain explicit future research variants, not hidden baseline behavior.
 
-## Rothermel reference status
+## Rothermel validation truth
 
-### R1 — heterogeneous fuel-bed quantities — complete
+Selected reference line:
 
-Validated SI/native-unit handling and fuel-bed derived quantities include:
+> **Albini-adjusted Rothermel surface fire behavior.**
+
+Pinned Grade B values include:
 
 ```text
-surface-area weights
-characteristic SAV
-packing ratio
-bulk density
-optimum packing ratio
-```
-
-Fixed six-class order:
-
-```text
-DEAD_1H
-DEAD_10H
-DEAD_100H
-DEAD_HERBACEOUS
-LIVE_HERBACEOUS
-LIVE_WOODY
-```
-
-### R2 — Albini-adjusted base ROS — Grade B
-
-Pinned Behave references:
-
-```text
-FM1
+FM1 base
 4.4262698923571939 chains/h
 0.024733996158492002 m/s
 
-FM2
+FM2 base
 2.3810521029916596 chains/h
 0.013305319151517395 m/s
-```
 
-### R3 — wind/slope/maximum spread — Grade B
-
-Pinned references include:
-
-```text
-FM1, 30% slope, zero wind
+FM1, 30% slope
 20.817222076028628 chains/h
 
-FM1, zero slope, 100 ft/min DirectMidflame wind
+FM1, 100 ft/min DirectMidflame wind
 8.834274755440232 chains/h
 
-FM1, 30% slope + perpendicular 100 ft/min wind
-21.399596624626479 chains/h maximum ROS
-```
+FM1, 30% slope + perpendicular wind
+21.399596624626479 chains/h
 
-Implemented:
-
-```text
-slope factor
-wind factor
-effective-wind inversion
-optional wind-speed limit
-non-collinear wind/slope vector composition
-wind-from/downwind direction semantics
-aspect/upslope direction semantics
-```
-
-### R4 — public Rothermel model — complete
-
-```text
-RothermelModel.compute(RothermelInputs)
-→ FireBehaviorResult
-```
-
-Stable validated public behavior outputs currently emphasize:
-
-```text
-spread_rate_m_s
-spread_direction_deg
-```
-
-Fireline intensity/flame length are not yet presented as validated public simulator outputs.
-
-### R5 — dynamic herbaceous curing — Grade B
-
-Pinned GR1 case:
-
-```text
-GR1 / model 101
-live herb moisture = 60%
-zero wind / zero slope
+GR1 dynamic, live-herb moisture 60%, zero wind/slope
 0.71419316836403091 chains/h
 0.003990911424818205 m/s
+
+FM1 FromIgnitionPoint 90° off-axis
+5.2277130003983068 chains/h
+0.02921246024622574 m/s
 ```
 
-The dynamic herbaceous load-transfer path is integrated into the same Rothermel base equations rather than implemented as a separate model.
+Fireline intensity/flame length remain outside validated baseline public outputs.
 
-## Standard fuel catalogue
+## Audited fuel catalogue
 
-The audited public baseline now includes:
+Current public baseline:
 
 ```text
 Anderson FM1–FM13
 Scott–Burgan GR1 (101)
 ```
 
-Anderson 13 values were audited directly against the pinned USFS Fire Lab Behave core file:
+Anderson records were audited directly against pinned USFS Fire Lab Behave core:
 
 ```text
-src/behave/fuelModels.cpp
+firelab/behave
 commit 29888c7ad364aa18cfb340f4c25a8e395f24260f
+src/behave/fuelModels.cpp
 ```
 
-Tests verify:
+Tests verify native record values, SI conversion, valid computation for FM1–FM13, and unchanged FM1/FM2/GR1 reference outputs.
 
-- FM1–FM13 native source fields;
-- all Anderson models convert into the SI `RothermelFuelModel` contract;
-- all 13 can compute positive zero-wind/zero-slope spread under a valid test moisture set;
-- existing FM1/FM2/GR1 Grade B regressions remain unchanged;
-- unaudited codes fail explicitly.
+The remaining Scott–Burgan catalogue does not block the first static release.
 
-The full Scott–Burgan 40 catalogue is **not required to block the first simple simulator release** and remains future catalogue work.
+## Static input contract
 
-## Directional surface spread — Grade B
-
-PyFireCA uses the pinned Behave/Catchpole ignition-point surface ellipse path:
-
-```text
-L/W = 0.936 exp(0.1147 U) + 0.461 exp(-0.0692 U) - 0.397
-e = sqrt((L/W)^2 - 1) / (L/W)
-R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
-```
-
-Pinned FM1 90° off-axis case:
-
-```text
-5.2277130003983068 chains/h
-0.02921246024622574 m/s
-```
-
-The physical raster baseline never assigns head ROS to every neighbor.
-
-## Static heterogeneous raster simulator
-
-### Input layers
-
-The version-1 static file workflow requires exactly:
+Version-1 file workflow requires exactly:
 
 ```text
 fuel_model                   integer code
@@ -255,36 +180,22 @@ slope                        degrees
 aspect                       degrees
 ```
 
-All files must share shape, CRS and full affine alignment.
+All rasters must share shape, CRS, and full affine alignment.
 
-The baseline remains deliberately fail-closed:
+Current physical geometry is deliberately fail-closed:
 
 ```text
-north-up only
-square cells only
+north-up
+square cells
 explicit metric cell_size_m
-cell_size_m must match affine pixel size
+cell_size_m matches affine pixel size
 ```
 
-No percent/radian/wind-height conversions are hidden inside the adapter.
-
-### Per-cell behavior
-
-```text
-StaticRasterRothermelInputsProvider
-→ StaticSpatialRothermelDirectionalSpreadRate
-→ StaticArrivalTimeSolver
-```
-
-Current baseline edge semantic:
-
-> **The source cell controls the outgoing edge ROS.**
-
-Alternative interface coupling remains a research comparison and is not a default CLI option.
+No moisture/slope/wind-height/angle conversion is silently inferred.
 
 ## User-facing simulator API
 
-New stable baseline objects:
+Stable baseline objects:
 
 ```text
 IgnitionEvent
@@ -294,16 +205,7 @@ StaticWildfireSimulationResult
 run_static_wildfire_simulation
 ```
 
-Supported ignition use cases:
-
-```text
-single ignition
-multiple simultaneous ignitions
-delayed ignition events
-duplicate events → earliest event wins
-```
-
-`StaticWildfireSimulationResult` provides:
+Result API includes:
 
 ```text
 arrival_times_s
@@ -318,31 +220,24 @@ burned_mask_at(...)
 summary_metrics()
 ```
 
-## YAML configuration and CLI
+## YAML / CLI
 
-Runtime dependency:
+Runtime configuration dependency:
 
 ```text
 PyYAML
 ```
 
-CLI intentionally uses the Python standard library `argparse`; no extra CLI framework was introduced.
+CLI uses standard-library `argparse`.
 
-Public commands:
+Commands:
 
 ```bash
 pyfireca validate config.yml
 pyfireca run config.yml
 ```
 
-Configuration version 1 is strict:
-
-- unknown top-level keys fail;
-- all ten raster inputs are required;
-- relative paths resolve relative to the YAML file;
-- ignition list must be non-empty;
-- output directory is explicit;
-- the baseline CLI does not expose research-only CA variants.
+Version-1 configuration is strict and does not expose research-only neighborhood/interface variants.
 
 Example:
 
@@ -350,15 +245,13 @@ Example:
 examples/static_run.yml
 ```
 
-Detailed guide:
+Manual:
 
 ```text
 docs/RUNNING_SIMULATOR.md
 ```
 
-## Reproducible run directory
-
-A completed file-based run now produces:
+## Run-directory contract
 
 ```text
 runs/<run>/
@@ -374,28 +267,9 @@ runs/<run>/
     └── perimeter.geojson
 ```
 
-### Provenance
+`metadata.json` records input SHA-256, raster geometry, ignition events, encountered fuel models, and pinned fuel-catalogue provenance.
 
-`metadata.json` records:
-
-```text
-raster geometry
-ignition events
-fuel models encountered
-pinned catalogue source commit
-SHA-256 of every input raster
-```
-
-`environment.json` records:
-
-```text
-PyFireCA version
-Python version
-platform
-GitHub commit when supplied by the execution environment
-```
-
-### Spatial output semantics
+Spatial output semantics:
 
 ```text
 arrival_time.tif
@@ -416,102 +290,129 @@ perimeter.geojson
   source CRS → WGS84 before serialization
 ```
 
-Run statistics exist only once at the run root as `metrics.json`; they are not duplicated inside `outputs/`.
+Run metrics have one canonical location: root `metrics.json`.
 
-## Integration/CI truth
+## CI / package truth
 
-The repository now tests three levels:
-
-1. base unit/regression tests under Python 3.11/3.12/3.13;
-2. GIS read/write and output round trips with Rasterio;
-3. real file workflow and CLI integration using temporary GeoTIFF input sets.
-
-Recent functional runs confirm:
+The repository now has five release-relevant CI paths:
 
 ```text
-Python 3.11  pass
-Python 3.12  pass
-Python 3.13  pass
-GIS workflow pass
-real YAML → GeoTIFF → simulator → outputs pass
+quality
+Python 3.11
+Python 3.12
+Python 3.13
+GIS
+package
 ```
 
-Ruff lint/format remains a mandatory quality gate. A Ruff-only failure must not be misinterpreted as a scientific regression.
-
-## Fixed development priority
-
-The current priority is **not** to implement the previously identified lattice/interface innovations.
-
-Until the simple simulator baseline is frozen:
+The package gate has already successfully verified:
 
 ```text
-complete user-facing workflow
-→ documentation
-→ release integration checks
-→ baseline tag/release preparation
-→ only then resume new CA research methods
+wheel build
+sdist build
+clean wheel install
+pyfireca --help
+clean [gis] wheel install
+Rasterio import
+clean installed-wheel generation of 10 GeoTIFFs
+pyfireca validate on those files
+pyfireca run on those files
+expected result files
 ```
 
-Research ideas are stored in:
+This means the documented install → CLI workflow has been exercised from the **built wheel**, not only from an editable checkout.
+
+A runtime/distribution version-equality regression now protects `pyfireca.__version__` against `pyproject.toml` drift.
+
+## Package metadata audit
+
+Completed:
 
 ```text
-docs/FUTURE_RESEARCH.md
+name/version
+author
+keywords
+Python classifiers
+project URLs
+console script
+optional GIS extra
 ```
 
-and must remain separate from default simulator behavior.
+`CITATION.cff` no longer contains a premature release date because the repository currently has no tag or GitHub release.
+
+### Remaining release blocker: license
+
+There is currently **no root LICENSE file** and no package license declaration.
+
+This is intentionally not auto-fixed because selecting MIT/BSD/Apache/GPL/etc. is a project/legal policy choice, not a formatting decision.
+
+Before release:
+
+```text
+choose license
+→ add LICENSE
+→ declare matching pyproject license metadata
+→ rerun package/CI gate
+```
+
+## Documentation state
+
+Current authoritative documentation has been synchronized to the implemented simulator:
+
+```text
+README.md
+README.zh-CN.md
+docs/RUNNING_SIMULATOR.md
+docs/DESIGN.md
+docs/VALIDATION.md
+docs/STATIC_RASTER_WORKFLOW.md
+docs/ROTHERMEL_REFERENCE.md
+docs/SIMULATOR_ROADMAP.md
+docs/DEVELOPMENT_PRIORITY.md
+docs/DEVELOPMENT.md
+docs/STATUS.md
+docs/HANDOFF.md
+docs/SESSION_LOG.md
+docs/RELEASE_CHECKLIST.md
+CHANGELOG.md
+```
+
+Old authoritative claims that R2/arrival/CLI were still future work or that the catalogue only contained FM1/FM2/GR1 have been removed where they affected current guidance.
 
 ## Immediate next target
 
-The major simulator workflow is now present. Remaining baseline tasks are release polish rather than new fire science:
+No new scientific feature should be added now.
+
+Remaining gate:
 
 ```text
-1. keep final CI all green
-2. synchronize handoff/development/changelog docs
-3. add/refresh end-to-end examples and usage documentation
-4. review packaging and clean-install behavior
-5. perform one release-readiness audit
-6. freeze/tag the first simple static baseline when ready
+1. choose/add project license
+2. confirm latest final main commit all green
+3. choose first baseline version/tag
+4. freeze release notes
+5. create tag/GitHub release
+6. add actual date-released to CITATION.cff
+7. record released commit/tag in STATUS/HANDOFF
 ```
 
-Optional catalogue expansion, dynamic weather, WRF, FBP, crown fire, spotting,
-suppression, Monte Carlo, GPU work, and PyFireCA-specific CA innovations do not
-block this baseline milestone.
-
-## Validation provenance
-
-Evidence grades:
-
-```text
-Grade A  primary/authoritative worked value
-Grade B  pinned official operational software regression
-Grade C  independent implementation comparison
-Grade D  internal analytical/synthetic fixture
-```
-
-Pinned upstream revisions:
-
-```text
-firelab/behave-app
-a3cfcd5903188d73445948af16644868225bb9d5
-
-firelab/behave
-29888c7ad364aa18cfb340f4c25a8e395f24260f
-```
-
-External workflows remain under `.github/workflows/behave7-*`.
+The code-level baseline is otherwise complete enough to freeze.
 
 ## Deferred beyond the first static baseline
 
-- remaining Scott–Burgan catalogue models;
-- affine-aware rotated/non-square raster geometry;
-- time-varying weather scheduler;
-- WRF/NetCDF/xarray integration;
-- fireline-intensity/flame-length public validation;
-- FBP;
-- crown fire;
-- spotting;
-- suppression;
-- Monte Carlo;
-- profiling-led Numba;
-- Torch/JAX/GPU/differentiable CA;
-- new PyFireCA-specific CA neighborhood/interface methods.
+```text
+remaining Scott–Burgan models
+affine-aware rotated/non-square geometry
+time-varying weather scheduler
+WRF/NetCDF/xarray
+fireline intensity/flame length public validation
+FBP
+crown fire
+spotting
+suppression
+Monte Carlo
+profiling-led Numba
+Torch/JAX/GPU/differentiable CA
+new PyFireCA-specific CA neighborhood/interface methods
+```
+
+Research ideas remain in `docs/FUTURE_RESEARCH.md` and should not be resumed until the baseline release gate closes.
