@@ -7,7 +7,6 @@ authors:
     given-names: Jinghao
 repository-code: "https://github.com/hujinghaoabcd/PyFireCA"
 version: 0.1.0a0
-date-released: 2026-08-12
 keywords:
   - wildfire
   - cellular automata
