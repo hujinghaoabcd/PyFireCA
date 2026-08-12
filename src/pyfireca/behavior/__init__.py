@@ -15,6 +15,7 @@ from pyfireca.behavior.rothermel import (
     RothermelInputs,
 )
 from pyfireca.behavior.rothermel_directional import HomogeneousRothermelDirectionalSpreadRate
+from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_arrival_solver
 from pyfireca.behavior.rothermel_layers import (
     RothermelRasterLayerNames,
     StaticRasterRothermelInputsProvider,
@@ -37,6 +38,7 @@ __all__ = [
     "StaticRasterRothermelInputsProvider",
     "StaticSpatialRothermelDirectionalSpreadRate",
     "available_standard_fuel_model_numbers",
+    "build_static_raster_rothermel_arrival_solver",
     "get_standard_fuel_model",
     "get_standard_fuel_model_record",
 ]
