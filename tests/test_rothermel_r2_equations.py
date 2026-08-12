@@ -5,6 +5,7 @@ from pyfireca.behavior._rothermel_equations import (
     compute_effective_heating_number,
     compute_heat_of_preignition_j_kg,
     compute_heat_sink_j_m3,
+    compute_live_moisture_of_extinction,
     compute_maximum_reaction_velocity_per_min,
     compute_mineral_damping,
     compute_moisture_damping,
@@ -31,7 +32,6 @@ FM1_BEHAVE7_BASE_ROS_M_S = 0.024733996158492002
 
 def test_fm1_combustible_load_matches_albini_adjustment() -> None:
     oven_dry_load_kg_m2 = lb_ft2_to_kg_m2(0.034)
-
     observed = compute_combustible_load(oven_dry_load_kg_m2, 0.0555)
 
     assert observed == pytest.approx(lb_ft2_to_kg_m2(0.032113), rel=1e-14)
@@ -39,23 +39,56 @@ def test_fm1_combustible_load_matches_albini_adjustment() -> None:
 
 
 def test_fm1_mineral_damping_matches_operational_equation() -> None:
-    assert compute_mineral_damping(0.01) == pytest.approx(
-        0.4173969279093913,
-        rel=1e-14,
-    )
+    assert compute_mineral_damping(0.01) == pytest.approx(0.4173969279093913, rel=1e-14)
 
 
 def test_fm1_dead_moisture_damping_matches_operational_equation() -> None:
-    assert compute_moisture_damping(0.05, 0.12) == pytest.approx(
-        0.5533564814814815,
-        rel=1e-14,
-    )
+    assert compute_moisture_damping(0.05, 0.12) == pytest.approx(0.5533564814814815, rel=1e-14)
 
 
 def test_moisture_damping_is_zero_at_or_above_extinction() -> None:
     assert compute_moisture_damping(0.12, 0.12) == 0.0
     assert compute_moisture_damping(0.20, 0.12) == 0.0
     assert compute_moisture_damping(0.0, 0.0) == 0.0
+
+
+def test_fm2_live_moisture_of_extinction_matches_albini_operational_path() -> None:
+    observed = compute_live_moisture_of_extinction(
+        dead_loads=[lb_ft2_to_kg_m2(value) for value in (0.092, 0.046, 0.023)],
+        dead_sav_m_inv=[ft_inv_to_m_inv(value) for value in (3000.0, 109.0, 30.0)],
+        dead_moisture_fractions=[0.05, 0.05, 0.05],
+        live_loads=[lb_ft2_to_kg_m2(0.023)],
+        live_sav_m_inv=[ft_inv_to_m_inv(1500.0)],
+        dead_moisture_of_extinction_fraction=0.15,
+    )
+
+    assert observed == pytest.approx(11.63009861291455, rel=1e-14)
+    assert compute_moisture_damping(1.0, observed) == pytest.approx(0.7974243950239339, rel=1e-14)
+
+
+def test_live_moisture_of_extinction_is_bounded_by_dead_extinction() -> None:
+    observed = compute_live_moisture_of_extinction(
+        dead_loads=[lb_ft2_to_kg_m2(0.01)],
+        dead_sav_m_inv=[ft_inv_to_m_inv(100.0)],
+        dead_moisture_fractions=[0.15],
+        live_loads=[lb_ft2_to_kg_m2(1.0)],
+        live_sav_m_inv=[ft_inv_to_m_inv(1500.0)],
+        dead_moisture_of_extinction_fraction=0.15,
+    )
+
+    assert observed == 0.15
+
+
+def test_live_moisture_of_extinction_validates_sequence_shapes() -> None:
+    with pytest.raises(ValueError, match="equal lengths"):
+        compute_live_moisture_of_extinction(
+            dead_loads=[1.0, 2.0],
+            dead_sav_m_inv=[1.0],
+            dead_moisture_fractions=[0.1, 0.1],
+            live_loads=[1.0],
+            live_sav_m_inv=[1.0],
+            dead_moisture_of_extinction_fraction=0.15,
+        )
 
 
 def test_fm1_albini_reaction_velocity_exponent_uses_inverse_feet() -> None:
