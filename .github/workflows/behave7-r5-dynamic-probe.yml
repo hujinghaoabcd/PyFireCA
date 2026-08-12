@@ -1,0 +1,67 @@
+name: Behave 7 R5 dynamic fuel probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/behave7-r5-dynamic-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gr1-dynamic-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pinned Behave 7 app
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave-app
+          ref: a3cfcd5903188d73445948af16644868225bb9d5
+          path: behave-app
+          submodules: false
+          persist-credentials: false
+
+      - name: Check out pinned Behave core
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave
+          ref: 29888c7ad364aa18cfb340f4c25a8e395f24260f
+          path: behave-app/behave-lib/behave-mirror
+          persist-credentials: false
+
+      - name: Increase official test output precision only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("behave-app/behave-lib/test/cpp/testSurface.cpp")
+          source = path.read_text()
+          needle = "int main(int argc, char * argv[])\n{\n"
+          replacement = needle + "  std::cout << std::setprecision(17);\n"
+          if needle not in source:
+              raise SystemExit("Could not locate testSurface main()")
+          path.write_text(source.replace(needle, replacement, 1))
+          PY
+
+      - name: Build official testSurface
+        run: |
+          cmake \
+            -S behave-app/behave-lib \
+            -B behave-build \
+            -DTEST_BEHAVE=ON \
+            -DBEHAVE_WASM=OFF \
+            -DBEHAVE_JS=OFF \
+            -DBEHAVE_HTML=OFF
+          cmake --build behave-build --target testSurface --parallel 2
+
+      - name: Probe GR1 at 60 percent live-herb moisture
+        shell: bash
+        run: |
+          cat > gr1_dynamic_60pct.csv <<'CSV'
+          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
+          101,5.0,5.0,5.0,60.0,90.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,-1.0
+          CSV
+
+          echo "Probe is intentionally expected to fail once so observed pinned Behave ROS is visible."
+          ./behave-build/testSurface gr1_dynamic_60pct.csv | tee behave7_gr1_dynamic_probe.log
