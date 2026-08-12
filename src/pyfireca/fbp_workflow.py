@@ -147,9 +147,7 @@ def _fbp_metadata(
             {"row": event.row, "col": event.col, "time_s": event.time_s}
             for event in config.ignitions
         ],
-        "input_sha256": {
-            name: _sha256_file(path) for name, path in config.inputs.named_paths()
-        },
+        "input_sha256": {name: _sha256_file(path) for name, path in config.inputs.named_paths()},
     }
 
 
