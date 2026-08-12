@@ -56,6 +56,8 @@ class RothermelModel:
             raise TypeError("inputs must be RothermelInputs")
 
         base = compute_base_spread_result(inputs.fuel, inputs.moisture)
+        dynamic_transfer_fraction = base.dynamic_herbaceous_transfer_fraction
+        dynamic_transferred_load = base.dynamic_herbaceous_transferred_load_kg_m2
         if base.spread_rate_m_s <= 0.0:
             return FireBehaviorResult(
                 spread_rate_m_s=0.0,
@@ -66,10 +68,8 @@ class RothermelModel:
                     "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                     "packing_ratio": base.packing_ratio,
                     "relative_packing_ratio": base.relative_packing_ratio,
-                    "dynamic_herbaceous_transfer_fraction": (base.dynamic_herbaceous_transfer_fraction),
-                    "dynamic_herbaceous_transferred_load_kg_m2": (
-                        base.dynamic_herbaceous_transferred_load_kg_m2
-                    ),
+                    "dynamic_herbaceous_transfer_fraction": dynamic_transfer_fraction,
+                    "dynamic_herbaceous_transferred_load_kg_m2": dynamic_transferred_load,
                     "wind_factor": 0.0,
                     "slope_factor": 0.0,
                     "effective_factor": 0.0,
@@ -132,10 +132,8 @@ class RothermelModel:
                 "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                 "packing_ratio": base.packing_ratio,
                 "relative_packing_ratio": base.relative_packing_ratio,
-                "dynamic_herbaceous_transfer_fraction": (base.dynamic_herbaceous_transfer_fraction),
-                "dynamic_herbaceous_transferred_load_kg_m2": (
-                    base.dynamic_herbaceous_transferred_load_kg_m2
-                ),
+                "dynamic_herbaceous_transfer_fraction": dynamic_transfer_fraction,
+                "dynamic_herbaceous_transferred_load_kg_m2": dynamic_transferred_load,
                 "wind_factor": wind_factor,
                 "slope_factor": slope_factor,
                 "effective_factor": combined.effective_factor,
