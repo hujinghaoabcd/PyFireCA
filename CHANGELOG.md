@@ -2,7 +2,7 @@
 
 All notable changes to PyFireCA are documented here.
 
-PyFireCA is pre-1.0 research software. API changes are allowed during alpha development, but changes that affect users, experiments, reproducibility, or scientific interpretation must be recorded.
+PyFireCA is pre-1.0 research software. API changes are allowed during alpha development, but changes that affect users, experiments, reproducibility, licensing, or scientific interpretation must be recorded.
 
 ## [Unreleased]
 
@@ -52,13 +52,16 @@ PyFireCA is pre-1.0 research software. API changes are allowed during alpha deve
 - Audited Anderson standard fuel catalogue **FM1–FM13** from pinned USFS Fire Lab Behave source, plus Scott–Burgan **GR1 (101)**.
 - Pinned Grade B Behave regression workflows for base ROS, wind/slope behavior, dynamic GR1, and off-axis directional surface spread.
 
-### Added — testing and engineering
+### Added — testing, packaging, and engineering
 
 - Python 3.11/3.12/3.13 CI matrix.
 - Ruff lint/format quality gate, pytest, coverage, and pre-commit support.
 - Dedicated optional GIS CI job with Rasterio.
 - Real GeoTIFF integration tests covering output round trips, file-based simulation workflow, and CLI validate/run behavior.
-- Package CI gate that builds wheel + sdist, clean-installs the built wheel, exercises `pyfireca --help`, and clean-installs the built wheel with the `[gis]` extra.
+- Package CI gate that builds wheel + sdist, clean-installs the built wheel, exercises `pyfireca --help`, clean-installs the built wheel with the `[gis]` extra, and runs the installed GIS wheel end to end.
+- Distribution audit that verifies `License-Expression: MIT`, the packaged wheel license file, and the sdist `LICENSE` file.
+- MIT license at the repository root with copyright `2026 Jinghao Hu`.
+- PEP 639 package metadata with `license = "MIT"`, `license-files = ["LICENSE"]`, and a minimum Hatchling version of 1.27.
 - English and Chinese README files plus living design, development, validation, status, handoff, roadmap, session-log, and research-deferment documents.
 
 ### Changed
