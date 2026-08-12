@@ -53,15 +53,11 @@ class FireBehaviorResult:
 
     def __post_init__(self) -> None:
         _validate_nonnegative_finite("spread_rate_m_s", self.spread_rate_m_s)
-        _validate_nonnegative_finite(
-            "fireline_intensity_w_m", self.fireline_intensity_w_m
-        )
+        _validate_nonnegative_finite("fireline_intensity_w_m", self.fireline_intensity_w_m)
         _validate_nonnegative_finite("flame_length_m", self.flame_length_m)
 
         direction = self.spread_direction_deg
-        if direction is not None and (
-            not isfinite(direction) or not 0.0 <= direction < 360.0
-        ):
+        if direction is not None and (not isfinite(direction) or not 0.0 <= direction < 360.0):
             raise ValueError("spread_direction_deg must be finite and in [0, 360)")
 
         for key, value in self.diagnostics.items():
