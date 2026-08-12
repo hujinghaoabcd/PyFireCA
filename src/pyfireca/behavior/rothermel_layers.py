@@ -122,15 +122,11 @@ class StaticRasterRothermelInputsProvider:
         for name, unit in expected.items():
             actual = self.environment.layer(name).units
             if actual != unit:
-                raise ValueError(
-                    f"layer {name!r} must declare units={unit!r}; got {actual!r}"
-                )
+                raise ValueError(f"layer {name!r} must declare units={unit!r}; got {actual!r}")
 
         fuel_units = self.environment.layer(self.names.fuel_model).units
         if fuel_units not in (None, "code"):
-            raise ValueError(
-                f"fuel-model layer must use units=None or 'code'; got {fuel_units!r}"
-            )
+            raise ValueError(f"fuel-model layer must use units=None or 'code'; got {fuel_units!r}")
 
     @staticmethod
     def _resolve_fuel_models(
@@ -170,20 +166,14 @@ class StaticRasterRothermelInputsProvider:
             dead_1h_fraction=float(arrays[self.names.dead_1h_moisture][row, col]),
             dead_10h_fraction=float(arrays[self.names.dead_10h_moisture][row, col]),
             dead_100h_fraction=float(arrays[self.names.dead_100h_moisture][row, col]),
-            live_herbaceous_fraction=float(
-                arrays[self.names.live_herbaceous_moisture][row, col]
-            ),
+            live_herbaceous_fraction=float(arrays[self.names.live_herbaceous_moisture][row, col]),
             live_woody_fraction=float(arrays[self.names.live_woody_moisture][row, col]),
         )
         return RothermelInputs(
             fuel=self._fuel_models[fuel_code],
             moisture=moisture,
-            midflame_wind_speed_m_s=float(
-                arrays[self.names.midflame_wind_speed][row, col]
-            ),
-            wind_from_direction_deg=float(
-                arrays[self.names.wind_from_direction][row, col]
-            ),
+            midflame_wind_speed_m_s=float(arrays[self.names.midflame_wind_speed][row, col]),
+            wind_from_direction_deg=float(arrays[self.names.wind_from_direction][row, col]),
             slope_deg=float(arrays[self.names.slope][row, col]),
             aspect_deg=float(arrays[self.names.aspect][row, col]),
         )
