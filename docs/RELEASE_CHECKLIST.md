@@ -2,10 +2,9 @@
 
 > Target: first simple static simulator baseline
 >
-> Status: pre-release readiness gate
+> Status: **release candidate pending license decision + final all-green commit**
 
-This checklist exists to prevent a source-tree-only success from being mistaken
-for a reproducible software release.
+This checklist prevents a source-tree-only success from being mistaken for a reproducible software release.
 
 ## 1. Scope freeze
 
@@ -70,56 +69,71 @@ for a reproducible software release.
 - [x] Python 3.12 test job.
 - [x] Python 3.13 test job.
 - [x] Rasterio read/write integration tests.
-- [x] spatial-output round-trip tests.
-- [x] file-based YAML → GeoTIFF → simulator integration test.
-- [x] real CLI validate/run integration test with temporary GeoTIFF inputs.
-- [ ] Latest release-candidate commit has every CI job green simultaneously.
+- [x] Spatial-output round-trip tests.
+- [x] File-based YAML → GeoTIFF → simulator integration test.
+- [x] Real CLI validate/run integration test with temporary GeoTIFF inputs.
+- [x] Built-wheel GIS end-to-end smoke test exists and has passed.
+- [ ] Latest **final release-candidate commit** has every CI job green simultaneously.
 
 ## 7. Packaging
 
-- [ ] Wheel builds from repository source.
-- [ ] Source distribution builds from repository source.
-- [ ] Built wheel installs into a clean virtual environment.
-- [ ] `pyfireca --help` works from the clean wheel install.
-- [ ] `import pyfireca` works from the clean wheel install.
-- [ ] `[gis]` extra installs from the built wheel.
-- [ ] `import rasterio` works after clean `[gis]` installation.
-- [ ] Package metadata has been reviewed for name/version/license/project URLs/classifiers.
+Verified by the CI `package` job:
 
-These checks are now represented by the CI `package` job where practical.
+- [x] Wheel builds from repository source.
+- [x] Source distribution builds from repository source.
+- [x] Built wheel installs into a clean virtual environment.
+- [x] `pyfireca --help` works from the clean wheel install.
+- [x] `import pyfireca` works from the clean wheel install.
+- [x] `[gis]` extra installs from the built wheel.
+- [x] `import rasterio` works after clean `[gis]` installation.
+- [x] Clean built `[gis]` wheel can generate input GeoTIFFs and execute `pyfireca validate` + `pyfireca run` end to end.
+- [x] Package name/version/author/keywords/project URLs/Python classifiers reviewed.
+- [x] Runtime `pyfireca.__version__` is regression-tested against installed distribution metadata.
+- [ ] **Choose the project license, add a root `LICENSE` file, and declare matching package license metadata.**
+
+The license item is intentionally not guessed or auto-selected because it is a project/legal policy choice.
 
 ## 8. Documentation
 
-- [x] English README reflects current simulator, not the old architecture-only state.
-- [x] Chinese README reflects current simulator.
+- [x] English README reflects the current simulator.
+- [x] Chinese README reflects the current simulator.
 - [x] `docs/RUNNING_SIMULATOR.md` documents exact input/output semantics.
 - [x] `examples/static_run.yml` exists.
 - [x] `docs/STATUS.md` reflects current repository truth.
 - [x] `docs/HANDOFF.md` reflects current continuation point.
-- [x] `docs/SIMULATOR_ROADMAP.md` reflects completed S1–S7 work.
+- [x] `docs/SIMULATOR_ROADMAP.md` reflects completed S1–S7 work and S9 release gate.
 - [x] `docs/DEVELOPMENT.md` reflects the release-readiness priority.
-- [ ] `docs/SESSION_LOG.md` records the simulator-completion session.
-- [ ] `CHANGELOG.md` includes all user-visible baseline workflow additions.
-- [ ] Documented installation and CLI commands are confirmed against a clean built package.
+- [x] `docs/DESIGN.md` reflects the implemented arrival/config/CLI/output architecture.
+- [x] `docs/VALIDATION.md` reflects completed R2–R8 and GIS/package validation.
+- [x] `docs/STATIC_RASTER_WORKFLOW.md` reflects Anderson FM1–FM13 + GR1.
+- [x] `docs/ROTHERMEL_REFERENCE.md` reflects Anderson FM1–FM13 + GR1 and release-freeze priority.
+- [x] `docs/SESSION_LOG.md` records the simulator-completion session.
+- [x] `CHANGELOG.md` includes user-visible baseline workflow additions.
+- [x] Documented installation and CLI commands are confirmed against a clean built package in CI.
 
 ## 9. Final repository audit
 
-Before tagging:
+Completed:
 
-- [ ] Search docs for stale claims such as “Rothermel not implemented”, “FM1/FM2/GR1 only”, or “CLI planned”.
-- [ ] Search code/docs for duplicate or contradictory output semantics.
-- [ ] Confirm `__version__` and `pyproject.toml` version agree.
-- [ ] Confirm no generated run outputs, caches, or build artifacts are committed accidentally.
-- [ ] Confirm no optional research variant became a default accidentally.
-- [ ] Confirm latest main CI is all green.
+- [x] Authoritative docs were searched/reviewed for stale pre-Rothermel, FM1/FM2/GR1-only, and CLI-planned claims and updated where they affected current guidance.
+- [x] Duplicate run/output metrics semantics were removed; root `metrics.json` is canonical.
+- [x] `__version__` and distribution version are protected by an automated equality test.
+- [x] Root repository listing contains no generated run/build artifacts; `.gitignore` covers `dist/`, `build/`, `runs/`, `.venv-*`, and `.package-smoke/`.
+- [x] Research variants remain absent from the version-1 baseline YAML/CLI.
+
+Remaining:
+
+- [ ] Resolve the license decision and package license metadata.
+- [ ] Confirm the latest final main commit is all green after the last audit/documentation changes.
 
 ## 10. Tag/release gate
 
-Only after every required item above is satisfied:
+Only after the two remaining gates above are satisfied:
 
-- [ ] choose the first baseline release version/tag;
-- [ ] freeze release notes from `CHANGELOG.md`;
-- [ ] create the tag/release;
-- [ ] record the released commit in `STATUS.md` and `HANDOFF.md`.
+- [ ] Choose the first baseline release version/tag.
+- [ ] Freeze release notes from `CHANGELOG.md`.
+- [ ] Create the tag/release.
+- [ ] Add the actual release date to `CITATION.cff`.
+- [ ] Record the released commit/tag in `STATUS.md` and `HANDOFF.md`.
 
-Do not tag the baseline merely because local/editable-install tests pass.
+There is currently no GitHub tag or release, so `CITATION.cff` deliberately does not contain a premature `date-released` field.
