@@ -55,16 +55,31 @@ python -m pip install -e ".[dev]"
 
 ## Quick start
 
-The current bootstrap release contains the minimal CA primitives first. Runnable wildfire examples will be added after the reference transition contract is validated.
+The first executable reference rule is deliberately simple: a burning cell becomes burned and ignites currently unburned cells in its selected neighborhood. It exists to validate CA architecture before Rothermel/FBP physics are added.
 
 ```python
-from pyfireca.neighborhood import MooreNeighborhood
-from pyfireca.state import FireState
+import numpy as np
 
-neighborhood = MooreNeighborhood(radius=1)
-print(neighborhood.offsets())
-print(FireState.BURNING)
+from pyfireca import (
+    FireState,
+    MooreNeighborhood,
+    NeighborIgnitionRule,
+    RasterGrid,
+    Simulation,
+)
+
+state = np.full((7, 7), FireState.UNBURNED, dtype=np.uint8)
+state[3, 3] = FireState.BURNING
+
+grid = RasterGrid(state=state, cell_size=30.0)
+rule = NeighborIgnitionRule(MooreNeighborhood(radius=1))
+sim = Simulation.from_seed(grid=grid, rule=rule, seed=42)
+
+sim.run(steps=3)
+print(sim.grid.state)
 ```
+
+A runnable version is available at [`examples/minimal.py`](examples/minimal.py).
 
 ## Planned scientific scope
 
@@ -96,10 +111,14 @@ Development-stage documents are maintained continuously:
 - [`docs/HANDOFF.md`](docs/HANDOFF.md) — detailed continuation guide for the next development session;
 - [`docs/VALIDATION.md`](docs/VALIDATION.md) — scientific and numerical validation plan.
 
+## Citation
+
+Software citation metadata is available in [`CITATION.cff`](CITATION.cff).
+
 ## Project status
 
 PyFireCA is in **early development**. The current milestone is `v0.1.0`: establish a small, tested CA reference core before implementing complete wildfire spread formulations.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) once the contribution workflow is initialized. Until then, architecture changes should follow the contracts in `docs/DESIGN.md` and keep `docs/STATUS.md` / `docs/HANDOFF.md` synchronized with code changes.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Architecture changes should follow the contracts in `docs/DESIGN.md` and keep `docs/STATUS.md` / `docs/HANDOFF.md` synchronized with code changes.
