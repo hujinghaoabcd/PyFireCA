@@ -67,3 +67,36 @@ jobs:
             tests/test_output_rasterio.py \
             tests/test_workflow_rasterio.py \
             tests/test_cli_rasterio.py
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+          ls -lh dist/
+
+      - name: Clean-install built wheel and exercise console script
+        run: |
+          python -m venv .venv-wheel
+          . .venv-wheel/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          pyfireca --help
+          python -c "import pyfireca; print(pyfireca.__version__)"
+
+      - name: Clean-install built wheel with GIS extra
+        run: |
+          WHEEL=$(realpath dist/*.whl)
+          python -m venv .venv-gis
+          . .venv-gis/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install "pyfireca[gis] @ file://${WHEEL}"
+          python -c "import pyfireca, rasterio; print(pyfireca.__version__, rasterio.__version__)"
