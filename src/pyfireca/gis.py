@@ -8,12 +8,14 @@ core stays usable with the base dependency set.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import hypot, isclose, isfinite
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+
+from pyfireca.state import validate_state_array
 
 AffineTuple = tuple[float, float, float, float, float, float]
 RasterArray = NDArray[np.number]
@@ -243,3 +245,26 @@ def write_raster(
         nodata=metadata.nodata,
     ) as dataset:
         dataset.write(values, 1)
+
+
+def write_state_raster(
+    path: str | Path,
+    state: NDArray[np.integer],
+    metadata: RasterMetadata,
+) -> None:
+    """Write a canonical wildfire-state GeoTIFF.
+
+    State rasters are complete CA outputs rather than masked source rasters.
+    They therefore use the canonical integer state codes as ``uint8`` and set
+    GeoTIFF NoData to ``None``. In particular, state code ``0`` remains the
+    explicit ``UNBURNABLE`` model state and is never reinterpreted as file-level
+    NoData.
+    """
+
+    state = np.asarray(state)
+    validate_state_array(state)
+    if state.shape != metadata.shape:
+        raise ValueError(f"state shape {state.shape} does not match metadata {metadata.shape}")
+
+    output_metadata = replace(metadata, nodata=None)
+    write_raster(path, state.astype(np.uint8, copy=False), output_metadata)
