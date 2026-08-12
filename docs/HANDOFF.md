@@ -8,7 +8,7 @@
 
 Repository: `hujinghaoabcd/PyFireCA`
 
-PyFireCA is a **wildfire cellular-automata research framework**. Fire behavior, directional fire-shape geometry, and CA/event propagation are separate layers.
+PyFireCA is a **wildfire cellular-automata research framework**. Urban CA projects are engineering/GIS references only; urban simulation is not product scope.
 
 Protected extension points:
 
@@ -20,14 +20,15 @@ Time stepping / event scheduler
 Behavior model
 Directional spread model
 Spatial input provider
+Edge-coupling rule
 ```
 
 Do not casually reverse these decisions:
 
 1. wildfire-specific scope;
 2. NumPy is the readable scientific reference path;
-3. optimization only after profiling;
-4. fire behavior and propagation remain separate;
+3. optimize only after profiling;
+4. fire behavior and CA/event propagation remain separate;
 5. GIS I/O stays outside numerical kernels;
 6. public behavior quantities use explicit SI units;
 7. R2 is Albini-adjusted Rothermel;
@@ -41,9 +42,13 @@ Do not casually reverse these decisions:
 15. physical edge propagation requires direction-specific ROS;
 16. do not assign maximum/head ROS to every neighbor;
 17. arrival propagation uses the Behave `FromIgnitionPoint` radial spread path, not `FromPerimeter`;
-18. surface L/W uses effective wind, and limited effective wind when wind limiting is active;
-19. the current raster bearing helper is explicitly north-up;
-20. external reference values carry evidence grades and pinned provenance.
+18. surface L/W uses effective wind, including limited effective wind when wind limiting is active;
+19. current physical raster geometry is explicitly north-up + square-cell;
+20. the current heterogeneous edge baseline is **source-cell controlled**;
+21. source/target averaging or interface resistance are separate research hypotheses, not hidden tweaks;
+22. static raster units are strict and never silently converted;
+23. static providers must not be mutated to fake dynamic weather;
+24. external reference values carry evidence grades and pinned provenance.
 
 ## 2. Current source tree to read first
 
@@ -71,12 +76,22 @@ src/pyfireca/
     ├── _rothermel_vectors.py
     ├── _surface_ellipse.py
     ├── rothermel_model.py
-    └── rothermel_directional.py
+    ├── rothermel_directional.py
+    ├── rothermel_spatial.py
+    ├── rothermel_layers.py
+    └── rothermel_landscape.py
+```
+
+Also read:
+
+```text
+docs/STATIC_RASTER_WORKFLOW.md
+examples/static_raster_rothermel.py
 ```
 
 Do not create empty future modules only to match an architecture diagram.
 
-## 3. Two propagation baselines now coexist
+## 3. Two propagation baselines coexist
 
 ### Synchronous CA reference
 
@@ -116,7 +131,7 @@ North-up convention:
 (0, -1) west  270°
 ```
 
-Rotated/sheared/non-square geospatial grids require a future affine-aware adapter.
+The current landscape factory deliberately rejects rotated/sheared/non-square grids. Do not generalize geometry by approximation; implement an affine-aware path later if required.
 
 ## 5. Rothermel R1–R5 truth
 
@@ -169,7 +184,7 @@ GR1, 60% live-herb moisture, zero wind/slope
 0.003990911424818205 m/s
 ```
 
-`RothermelModel.compute()` is public and reproduces these validated stages.
+`RothermelModel.compute()` reproduces these validated stages.
 
 Dynamic curing rule:
 
@@ -191,102 +206,32 @@ Currently public and audited only:
 101  GR1
 ```
 
-Public API:
+Unknown fuel numbers fail explicitly as not audited yet. Do not claim the full Anderson 13 / Scott–Burgan 40 catalogue is complete.
 
-```text
-StandardFuelModelRecord
-available_standard_fuel_model_numbers
-get_standard_fuel_model_record
-get_standard_fuel_model
-```
+## 7. R7 directional surface ellipse — Grade B
 
-Unknown fuel numbers fail explicitly as not audited yet.
-
-## 7. R7 surface ellipse — now validated
-
-Pinned Behave surface length-to-width relation:
+Pinned Behave surface ellipse:
 
 ```text
 L/W = 0.936 exp(0.1147 U) + 0.461 exp(-0.0692 U) - 0.397
-```
-
-with effective wind `U` in mph and surface cap `L/W <= 8`.
-
-Then:
-
-```text
 e = sqrt((L/W)^2 - 1) / (L/W)
-R_back = R_head * (1 - e) / (1 + e)
-R_flank = (R_head + R_back) / (2 * L/W)
-```
-
-Pinned Behave `FromIgnitionPoint` radial spread:
-
-```text
 R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
 ```
 
-`beta` is angular separation from the maximum-spread direction.
+`U` is effective wind in mph; surface `L/W <= 8`.
 
-Implementation:
-
-```text
-src/pyfireca/behavior/_surface_ellipse.py
-```
-
-### Grade B FM1 off-axis reference
-
-Workflow:
-
-```text
-.github/workflows/behave7-r7-directional.yml
-```
-
-Pinned case:
-
-```text
-FM1
-5/5/5% dead moisture
-100 ft/min DirectMidflame wind
-zero slope
-90° from head
-FromIgnitionPoint
-```
-
-Official full-precision result:
+Pinned FM1 `FromIgnitionPoint`, 100 ft/min, zero slope, 90° from head:
 
 ```text
 5.2277130003983068 chains/h
 0.02921246024622574 m/s
 ```
 
-The strengthened workflow checks the exact raw marker plus:
+The dedicated R7 workflow requires exact raw marker plus `172 passed / 0 failed`.
 
-```text
-Total tests performed: 172
-Total tests passed:    172
-Total tests failed:    0
-```
+`HomogeneousRothermelDirectionalSpreadRate` bridges one validated Rothermel state to north-up raster edge ROS.
 
-This 90° radial ROS is Grade B.
-
-## 8. Rothermel directional edge provider
-
-Public:
-
-```text
-HomogeneousRothermelDirectionalSpreadRate
-```
-
-It:
-
-1. evaluates one static `RothermelInputs` once;
-2. builds the surface ellipse from maximum ROS and effective wind;
-3. maps north-up raster offsets to geographic bearings;
-4. computes angular offset from the head direction;
-5. returns Behave-style `FromIgnitionPoint` radial ROS for the outgoing edge.
-
-FM1 100 ft/min reference behavior:
+Known FM1 100 ft/min directional values:
 
 ```text
 east head       0.04936592733340002 m/s
@@ -295,36 +240,129 @@ west backing    0.02074385430924511 m/s
 NE/SE 45°       0.041067604539224284 m/s
 ```
 
-The diagonal path is **not** `head_ROS*cos(theta)`.
+Never replace the ellipse with `head_ROS*cos(theta)`.
 
-## 9. First end-to-end anisotropic physical path
+## 8. R8 static heterogeneous spatial provider
 
-Tests now exercise:
+Public:
 
 ```text
-RothermelModel
-→ effective-wind surface ellipse
-→ north-up edge bearing
-→ directional edge ROS
-→ distance / ROS
+StaticSpatialRothermelDirectionalSpreadRate
+```
+
+Contract:
+
+```text
+inputs_provider(row, col) -> RothermelInputs
+```
+
+The provider evaluates/caches one behavior + ellipse per source cell and then returns outgoing directional edge ROS.
+
+Current baseline assumption:
+
+> **The source cell determines the outgoing edge ROS.**
+
+Tests include a line where source-cell wind changes direction: one edge uses head ROS and the next uses backing ROS. This proves the arrival solver re-evaluates behavior by source cell.
+
+`clear_cache()` is for controlled experiments/tests only; it does not make the provider dynamically time-aware.
+
+## 9. R8 static raster input contract
+
+Public:
+
+```text
+RothermelRasterLayerNames
+StaticRasterRothermelInputsProvider
+```
+
+Default layer contract:
+
+```text
+fuel_model                   code / None
+dead_1h_moisture             fraction
+dead_10h_moisture            fraction
+dead_100h_moisture           fraction
+live_herbaceous_moisture     fraction
+live_woody_moisture          fraction
+midflame_wind_speed          m/s
+wind_from_direction          deg
+slope                        deg
+aspect                       deg
+```
+
+Important:
+
+- moisture rasters are already fractions, not percentages;
+- slope is already degrees, not percent slope;
+- wind is already midflame m/s, not 10-m/20-ft wind;
+- wind direction is meteorological from-bearing;
+- fuel code must be integer-like and audited;
+- required layers must be static;
+- NoData outside `domain_mask` is legal;
+- NoData/nonfinite values inside `domain_mask` fail fast.
+
+No unit conversion is hidden in this adapter.
+
+## 10. Landscape factory
+
+Public:
+
+```text
+build_static_raster_rothermel_arrival_solver(...)
+```
+
+Assembly:
+
+```text
+LandscapeInput
+→ StaticRasterRothermelInputsProvider
+→ StaticSpatialRothermelDirectionalSpreadRate
 → StaticArrivalTimeSolver
 ```
 
-On an east-west line, the head-fire cell arrives before the backing-fire cell. On a north-south line, travel time uses the pinned Grade B 90° off-axis ROS.
+It is deliberately thin. It does not infer ignition, solve, interpolate, mutate state, or write output.
 
-This is the first validated anisotropic physical-time spread chain in PyFireCA.
-
-## 10. Wind-limit detail that must not regress
-
-When the optional wind limit is exceeded, `RothermelModel` now reports:
+Geometry contract:
 
 ```text
-effective_wind_speed_m_s = wind_speed_limit_m_s
+north-up affine
+square pixels
+positive x step
+negative y step
+explicit cell_size_m
+cell_size_m == affine x/y pixel magnitude
 ```
 
-not the pre-limit effective wind. This matters because the ellipse L/W must use the limited effective wind.
+Why `cell_size_m` is explicit: lightweight `RasterMetadata` stores a CRS string but does not parse CRS linear units. The caller asserts that affine coordinates are metric; the factory checks geometric consistency only.
 
-## 11. Validation provenance
+Rotated, sheared, rectangular, or mismatched grids are rejected.
+
+## 11. Example that must remain executable
+
+```text
+examples/static_raster_rothermel.py
+```
+
+It demonstrates:
+
+```text
+5×7 raster environment
+→ LandscapeInput
+→ Rothermel landscape factory
+→ ignition times
+→ earliest arrival
+→ FireState snapshot at physical time
+```
+
+`tests/test_examples.py` smoke-runs the example so API changes cannot silently break it.
+
+Detailed data contract:
+
+```text
+docs/STATIC_RASTER_WORKFLOW.md
+```
+
+## 12. Validation provenance
 
 Pinned software:
 
@@ -354,51 +392,34 @@ Workflows:
 .github/workflows/behave7-r7-directional.yml
 ```
 
-## 12. CI truth
+## 13. CI truth
 
-R7 functional tests have passed on:
+The R8 functional path has passed across Python 3.11/3.12/3.13 and GIS jobs in the recent runs. Several recent red main runs were Ruff-format-only while every functional job was green. Always inspect the failed step before changing scientific code.
 
-```text
-Python 3.11
-Python 3.12
-Python 3.13
-GIS
-```
+Canonical baseline = latest all-green post-format main run.
 
-The dedicated pinned R7 Behave workflow is green. If only quality is red, inspect Ruff before touching scientific code.
+## 14. Exact next research work
 
-## 13. Exact next work
+The basic static GIS pipeline is no longer the science bottleneck. Do not immediately jump to WRF or GPU.
 
-The off-axis science gate is resolved. Next implement a **static spatially heterogeneous directional provider**.
-
-Recommended interface:
+The most useful next CA work is controlled comparison of discretization assumptions while keeping the validated behavior model fixed:
 
 ```text
-inputs_provider(row, col) -> RothermelInputs
-        ↓
-per-source-cell Rothermel behavior + ellipse
-        ↓
-outgoing directional edge ROS
-        ↓
-StaticArrivalTimeSolver
+A. source-cell-controlled outgoing edge ROS       current baseline
+B. explicit source/target interface coupling      future variant
+
+4-neighbor vs 8-neighbor vs extended neighborhood
+cell-size sensitivity
+lattice directional bias
+arrival-time error
+perimeter/shape error
 ```
 
-First-baseline edge semantic is intentionally:
+Any source/target averaging must be a named provider/variant, never an invisible modification of `StaticSpatialRothermelDirectionalSpreadRate`.
 
-> **Outgoing edge ROS is determined by the source cell.**
+After a controlled static benchmark exists, design the time-dependent weather scheduler **in docs first**. Static Dijkstra assumes an edge's travel time is invariant while the fire traverses it; dynamic weather violates that assumption.
 
-Do not invent source/target averaging until there is a scientific rationale and a separately tested alternative.
-
-After this:
-
-```text
-heterogeneous static provider
-→ heterogeneous arrival validation
-→ affine-aware distance/bearing
-→ time-dependent weather/event scheduler
-```
-
-## 14. Deferred work
+## 15. Deferred work
 
 - full Anderson 13 / Scott–Burgan 40 catalogue audit;
 - affine-aware rotated/non-square raster geometry;
@@ -413,17 +434,21 @@ heterogeneous static provider
 - Numba optimization;
 - Torch/JAX/GPU/differentiable CA.
 
-## 15. Files to read first next session
+## 16. Files to read first next session
 
 ```text
 1. docs/STATUS.md
 2. docs/HANDOFF.md
-3. docs/ROTHERMEL_REFERENCE.md
-4. src/pyfireca/behavior/rothermel_model.py
-5. src/pyfireca/behavior/_surface_ellipse.py
-6. src/pyfireca/behavior/rothermel_directional.py
-7. src/pyfireca/propagation.py
-8. src/pyfireca/arrival.py
-9. tests/test_rothermel_directional.py
-10. tests/test_arrival.py
+3. docs/STATIC_RASTER_WORKFLOW.md
+4. docs/ROTHERMEL_REFERENCE.md
+5. src/pyfireca/behavior/rothermel_model.py
+6. src/pyfireca/behavior/_surface_ellipse.py
+7. src/pyfireca/behavior/rothermel_directional.py
+8. src/pyfireca/behavior/rothermel_spatial.py
+9. src/pyfireca/behavior/rothermel_layers.py
+10. src/pyfireca/behavior/rothermel_landscape.py
+11. src/pyfireca/arrival.py
+12. tests/test_rothermel_layers.py
+13. tests/test_rothermel_landscape.py
+14. examples/static_raster_rothermel.py
 ```
