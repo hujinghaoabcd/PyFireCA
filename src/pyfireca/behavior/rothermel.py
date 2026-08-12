@@ -1,9 +1,8 @@
-"""Typed input contracts for the Rothermel surface-fire reference model.
+"""Typed inputs and reference calculations for Rothermel surface fire.
 
-The equation implementation is intentionally added after these contracts and
-reference fixtures are validated. PyFireCA stores the model-facing public
-inputs in SI units even when published/reference implementations use legacy
-US customary units internally.
+PyFireCA exposes SI units at the public behavior boundary. Scientific
+calculations are introduced incrementally and validated before the complete
+rate-of-spread model is assembled.
 """
 
 from __future__ import annotations
@@ -12,7 +11,10 @@ from dataclasses import dataclass
 from enum import IntEnum
 from math import isfinite
 
+from pyfireca.behavior._units import m_inv_to_ft_inv
+
 FuelClassValues = tuple[float, float, float, float, float, float]
+FuelCategoryValues = tuple[float, float]
 
 
 class FuelClass(IntEnum):
@@ -230,3 +232,95 @@ def _validate_direction(name: str, value: float) -> None:
     _validate_finite(name, value)
     if not 0.0 <= value < 360.0:
         raise ValueError(f"{name} must be in [0, 360)")
+
+
+def compute_surface_area_weights(
+    fuel: RothermelFuelModel,
+) -> tuple[FuelClassValues, FuelCategoryValues]:
+    """Compute Rothermel surface-area weighting factors.
+
+    The six within-category weights correspond to ``f_ij`` in Rothermel's
+    heterogeneous-fuel formulation. The two category weights correspond to
+    dead and live ``f_i`` respectively.
+    """
+
+    surface_areas: list[float] = []
+    for fuel_class in FuelClass:
+        index = int(fuel_class)
+        load = fuel.loads_kg_m2[index]
+        if load <= 0.0:
+            surface_areas.append(0.0)
+            continue
+        surface_areas.append(
+            fuel.sav_ratio_m_inv[index]
+            * load
+            / fuel.particle_density_kg_m3[index]
+        )
+
+    dead_area = sum(surface_areas[:4])
+    live_area = sum(surface_areas[4:])
+    total_area = dead_area + live_area
+
+    within = tuple(
+        area / (dead_area if index < 4 else live_area)
+        if (dead_area if index < 4 else live_area) > 0.0
+        else 0.0
+        for index, area in enumerate(surface_areas)
+    )
+    categories: FuelCategoryValues
+    if total_area > 0.0:
+        categories = (dead_area / total_area, live_area / total_area)
+    else:
+        categories = (0.0, 0.0)
+
+    return within, categories  # type: ignore[return-value]
+
+
+def compute_characteristic_sav_m_inv(fuel: RothermelFuelModel) -> float:
+    """Return the surface-area-weighted characteristic SAV ratio in 1/m."""
+
+    within, categories = compute_surface_area_weights(fuel)
+    dead_sav = sum(
+        within[index] * fuel.sav_ratio_m_inv[index] for index in range(4)
+    )
+    live_sav = sum(
+        within[index] * fuel.sav_ratio_m_inv[index] for index in range(4, 6)
+    )
+    return categories[0] * dead_sav + categories[1] * live_sav
+
+
+def compute_packing_ratio(fuel: RothermelFuelModel) -> float:
+    """Return mean fuel-bed packing ratio as a dimensionless fraction."""
+
+    if fuel.depth_m <= 0.0:
+        return 0.0
+
+    occupied_depth = 0.0
+    for fuel_class in FuelClass:
+        index = int(fuel_class)
+        load = fuel.loads_kg_m2[index]
+        if load > 0.0:
+            occupied_depth += load / fuel.particle_density_kg_m3[index]
+    return occupied_depth / fuel.depth_m
+
+
+def compute_bulk_density_kg_m3(fuel: RothermelFuelModel) -> float:
+    """Return oven-dry fuel-bed bulk density in kg/m³."""
+
+    if fuel.depth_m <= 0.0:
+        return 0.0
+    return sum(fuel.loads_kg_m2) / fuel.depth_m
+
+
+def compute_optimum_packing_ratio(characteristic_sav_m_inv: float) -> float:
+    """Return optimum packing ratio from Rothermel's characteristic SAV.
+
+    The published correlation uses inverse feet, so the SI characteristic SAV
+    is converted explicitly before evaluating the dimensionless equation.
+    """
+
+    _validate_nonnegative("characteristic_sav_m_inv", characteristic_sav_m_inv)
+    if characteristic_sav_m_inv == 0.0:
+        return 0.0
+    sav_ft_inv = m_inv_to_ft_inv(characteristic_sav_m_inv)
+    return 3.348 * sav_ft_inv**-0.8189
