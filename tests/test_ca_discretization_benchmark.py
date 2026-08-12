@@ -40,7 +40,7 @@ def test_anisotropic_fm1_moore8_reduces_arrival_error_vs_vn4() -> None:
     assert moore8.metrics.mae_s < vn4.metrics.mae_s
 
 
-def test_heading_sweep_preserves_square_lattice_symmetry() -> None:
+def test_homogeneous_ellipse_lattice_error_is_heading_invariant() -> None:
     benchmark = _load_benchmark_module()
     results = benchmark.run_heading_sweep(
         headings_deg=(0.0, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0),
@@ -50,11 +50,16 @@ def test_heading_sweep_preserves_square_lattice_symmetry() -> None:
     indexed = {(result.neighborhood, result.head_direction_deg): result for result in results}
 
     for neighborhood in ("VN4", "Moore8"):
-        for first, reflected in ((0.0, 90.0), (15.0, 75.0), (30.0, 60.0)):
-            first_metrics = indexed[(neighborhood, first)].metrics
-            reflected_metrics = indexed[(neighborhood, reflected)].metrics
-            assert first_metrics.mae_s == pytest.approx(reflected_metrics.mae_s, rel=1e-12)
-            assert first_metrics.rmse_s == pytest.approx(reflected_metrics.rmse_s, rel=1e-12)
+        baseline = indexed[(neighborhood, 0.0)].metrics
+        for heading in (15.0, 30.0, 45.0, 60.0, 75.0, 90.0):
+            observed = indexed[(neighborhood, heading)].metrics
+            assert observed.mae_s == pytest.approx(baseline.mae_s, rel=1e-12)
+            assert observed.rmse_s == pytest.approx(baseline.rmse_s, rel=1e-12)
+            assert observed.bias_s == pytest.approx(baseline.bias_s, rel=1e-12)
+            assert observed.max_abs_error_s == pytest.approx(
+                baseline.max_abs_error_s,
+                rel=1e-12,
+            )
 
 
 def test_cell_size_sweep_keeps_physical_half_extent_fixed() -> None:
