@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from pyfireca.config import StaticRunConfig
-from pyfireca.fbp_config import StaticFBPRunConfig, load_static_fbp_run_config
+from pyfireca.fbp_config import (
+    StaticFBPRunConfig,
+    load_static_fbp_run_config,
+)
 from pyfireca.run_config import configured_behavior_model, load_run_config
 
 
