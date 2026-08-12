@@ -25,9 +25,7 @@ def test_larger_neighborhood_offset_preserves_physical_distance() -> None:
 
 def test_travel_time_is_distance_divided_by_directional_ros() -> None:
     assert spread_travel_time_s(30.0, 0.1) == pytest.approx(300.0)
-    assert square_grid_neighbor_travel_time_s((1, 1), 30.0, 0.1) == pytest.approx(
-        300.0 * sqrt(2.0)
-    )
+    assert square_grid_neighbor_travel_time_s((1, 1), 30.0, 0.1) == pytest.approx(300.0 * sqrt(2.0))
 
 
 def test_zero_directional_ros_makes_positive_distance_unreachable() -> None:
