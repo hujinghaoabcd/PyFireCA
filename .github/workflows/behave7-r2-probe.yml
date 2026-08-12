@@ -1,4 +1,4 @@
-name: Behave 7 R2 reference regression
+name: Behave 7 Rothermel reference regression
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  zero-wind-zero-slope:
+  reference-cases:
     runs-on: ubuntu-latest
     steps:
       - name: Check out pinned Behave 7 app
@@ -55,7 +55,7 @@ jobs:
             -DBEHAVE_HTML=OFF
           cmake --build behave-build --target testSurface --parallel 2
 
-      - name: Verify pinned FM1 dead-only reference
+      - name: Verify pinned FM1 dead-only base reference
         shell: bash
         run: |
           cat > fm1_zero_wind_zero_slope.csv <<'CSV'
@@ -70,7 +70,7 @@ jobs:
           grep -q "Total tests passed: 1" behave7_fm1_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_reference.log
 
-      - name: Verify pinned FM2 static live-fuel reference
+      - name: Verify pinned FM2 static live-fuel base reference
         shell: bash
         run: |
           cat > fm2_zero_wind_zero_slope.csv <<'CSV'
@@ -78,7 +78,19 @@ jobs:
           2,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,2.3810521029916596
           CSV
 
-          echo "FM2 reference: dead moisture 5/5/5%; live herb 100%; direct-midflame wind 0 ft/min; slope 0%."
           ./behave-build/testSurface fm2_zero_wind_zero_slope.csv | tee behave7_fm2_reference.log
           grep -q "Total tests passed: 1" behave7_fm2_reference.log
           grep -q "Total tests failed: 0" behave7_fm2_reference.log
+
+      - name: Verify pinned FM1 slope-only reference
+        shell: bash
+        run: |
+          cat > fm1_slope_only.csv <<'CSV'
+          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
+          1,5.0,5.0,5.0,100.0,100.0,"Percent",30,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,20.817222076028628
+          CSV
+
+          echo "FM1 slope-only reference: 30% slope; zero direct-midflame wind."
+          ./behave-build/testSurface fm1_slope_only.csv | tee behave7_fm1_slope_reference.log
+          grep -q "Total tests passed: 1" behave7_fm1_slope_reference.log
+          grep -q "Total tests failed: 0" behave7_fm1_slope_reference.log
