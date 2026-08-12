@@ -8,6 +8,7 @@ from pyfireca.arrival import (
 )
 from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_arrival_solver
 from pyfireca.data import LandscapeInput
+from pyfireca.edge_coupling import HalfCellInterfaceDirectionalSpreadRate
 from pyfireca.grid import RasterGrid
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
 from pyfireca.rules import NeighborIgnitionRule
@@ -18,6 +19,7 @@ __all__ = [
     "ConstantDirectionalSpreadRate",
     "DirectionalSpreadRateProvider",
     "FireState",
+    "HalfCellInterfaceDirectionalSpreadRate",
     "LandscapeInput",
     "MooreNeighborhood",
     "NeighborIgnitionRule",
