@@ -2,7 +2,7 @@
 
 > Updated: 2026-08-12
 >
-> Current milestone: **D — Validated Rothermel reference implementation (R1 complete / R2 gated)**
+> Current milestone: **D — Validated Rothermel reference implementation (R1 complete / R2 variant fixed)**
 
 ## Current position
 
@@ -19,14 +19,14 @@ RothermelInputs
       ↓
 R1: units + fuel weighting/base quantities
       ↓
-R2: no-wind/no-slope ROS   ← next scientific gate
+R2: Albini-adjusted no-wind/no-slope ROS   ← fixtures next
       ↓
 FireBehaviorResult
       ↓
 future behavior-informed CA rule
 ```
 
-The complete Rothermel ROS equation chain is **not** implemented yet. R1 is intentionally separated from R2 so unit/weighting errors can be distinguished from differences among Rothermel/Albini/Andrews equation variants.
+The complete Rothermel ROS equation chain is **not** implemented yet. R1 is intentionally separated from R2 so unit/weighting errors can be distinguished from reaction/heat-transfer equation errors.
 
 ## Completed
 
@@ -105,6 +105,17 @@ The weighting implementation follows the heterogeneous-fuel structure in which p
 
 A hand-computable synthetic fuel fixture verifies exact expected values instead of taking another software package as truth.
 
+### R2 reference variant
+
+The reference line is now explicitly named **Albini-adjusted Rothermel**. Albini 1976 identifies four significant changes to the original 1972 computational path that PyFireCA will preserve as named adjustments:
+
+1. combustible loading uses `W0 * (1 - S_T)` rather than `W0 / (1 + S_T)`;
+2. reaction-velocity exponent uses `A = 133 * sigma^-0.7913`;
+3. live moisture of extinction uses revised exponentially weighted fine-fuel quantities and a dead-moisture-of-extinction lower bound;
+4. dead and live reaction intensities are added rather than combined by the earlier final category surface-area weighted average.
+
+Andrews 2018 is used as the modern consolidated consistency reference for this Albini-adjusted line.
+
 ### Tests / CI
 
 R1 tests cover:
@@ -119,7 +130,7 @@ R1 tests cover:
 - zero derived quantities for a nonburnable fuel model;
 - negative-input rejection.
 
-The R1 baseline is fully green in GitHub Actions: Ruff lint, Ruff format, the quality pytest run, and the Python 3.11/3.12/3.13 test matrix all pass on commit `793c393`.
+The R1 code baseline is fully green in GitHub Actions: Ruff lint, Ruff format, the quality pytest run, and the Python 3.11/3.12/3.13 test matrix all pass on commit `793c393`.
 
 ## Key decisions now implemented
 
@@ -135,28 +146,17 @@ The R1 baseline is fully green in GitHub Actions: Ruff lint, Ruff format, the qu
 10. Rothermel receives midflame wind explicitly; wind adjustment is external.
 11. Legacy-unit conversion is centralized and tested rather than embedded repeatedly in formulas.
 12. R1 fuel weighting/base quantities are separate from R2 reaction/heat-transfer equations.
-
-## R2 scientific decision gate
-
-Before implementing no-wind/no-slope ROS, the project must explicitly reconcile the selected reference formulation across:
-
-- original Rothermel 1972 equations;
-- Albini 1976 corrections used by later operational implementations;
-- Andrews 2018's consolidated explanation;
-- live moisture-of-extinction treatment;
-- dynamic herbaceous curing boundaries;
-- net-fuel-loading convention.
-
-Do not silently combine formulas from different vintages simply because an existing package does so.
+13. R2 follows the named Albini-adjusted Rothermel operational line rather than an unlabelled mixture of 1972 and later formulas.
 
 ## Not implemented yet
 
 ### Immediate scientific work
 
-- authoritative numeric R2 reference fixtures;
-- selected/documented Albini/Andrews correction set;
+- authoritative numeric fixtures for the Albini-adjusted R2 chain;
+- combustible/net fuel loading function;
 - mineral and moisture damping;
-- net fuel loading;
+- revised live moisture of extinction;
+- Albini-adjusted reaction-velocity exponent;
 - reaction velocity/intensity;
 - propagating flux ratio;
 - effective heating number / heat of preignition;
@@ -197,12 +197,10 @@ Do not silently combine formulas from different vintages simply because an exist
 
 ## Immediate next target
 
-The next task is **R2 preparation**, not Cell2Fire propagation yet:
+The next task is **R2 authoritative fixture preparation**, not Cell2Fire propagation yet:
 
 ```text
-primary-source reconciliation
-        ↓
-freeze named R2 equation/correction set
+Albini-adjusted equation provenance
         ↓
 authoritative numeric fixtures
         ↓
