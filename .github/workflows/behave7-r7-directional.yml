@@ -106,8 +106,10 @@ jobs:
       - name: Run official Behave test suite with FM1 off-axis case
         run: |
           ./behave-build/testBehave | tee behave7_r7_directional.log
-          grep -q "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H=" behave7_r7_directional.log
+          grep -q "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H=5.2277130003983068" behave7_r7_directional.log
           grep -q "PyFireCA pinned FM1 direct-midflame 100 ft/min" behave7_r7_directional.log
+          grep -q "Total tests passed: 172" behave7_r7_directional.log
+          grep -q "Total tests failed: 0" behave7_r7_directional.log
 
       - name: Upload directional regression log
         if: always()
