@@ -1,0 +1,55 @@
+name: CA Benchmarks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-ca-benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install -e .
+
+      - name: Run deterministic CA benchmark suite
+        run: |
+          mkdir -p benchmark-results
+          git rev-parse HEAD > benchmark-results/commit.txt
+          python --version > benchmark-results/python.txt
+          python benchmarks/ca_discretization.py \
+            --mode baseline \
+            --shape 101 \
+            --cell-size-m 30 \
+            --head-deg 30 \
+            > benchmark-results/neighborhood-baseline.csv
+          python benchmarks/ca_discretization.py \
+            --mode heading \
+            --shape 51 \
+            --cell-size-m 30 \
+            > benchmark-results/heading-sweep.csv
+          python benchmarks/ca_discretization.py \
+            --mode cell-size \
+            --half-extent-m 300 \
+            --head-deg 30 \
+            > benchmark-results/cell-size-sweep.csv
+          python benchmarks/edge_coupling.py \
+            > benchmark-results/fm1-fm2-interface.csv
+
+      - name: Upload benchmark CSVs
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyfireca-static-ca-benchmarks
+          path: benchmark-results/
+          if-no-files-found: error
