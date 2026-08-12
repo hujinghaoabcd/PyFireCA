@@ -1,7 +1,7 @@
+import runpy
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-import runpy
 
 
 def test_static_raster_rothermel_example_runs() -> None:
