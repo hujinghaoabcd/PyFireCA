@@ -8,6 +8,7 @@ __pycache__/
 
 # Environments
 .venv/
+.venv-*/
 venv/
 env/
 .conda/
@@ -16,6 +17,7 @@ env/
 build/
 dist/
 *.egg-info/
+.package-smoke/
 
 # Testing / coverage
 .pytest_cache/
