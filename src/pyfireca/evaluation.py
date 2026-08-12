@@ -85,7 +85,7 @@ def homogeneous_ellipse_lattice_arrival_error_s(
 
     The exact CA-minus-continuous arrival error is therefore::
 
-        (D_lattice - D_euclidean) / (R_head * (1-e))
+        (D_lattice - D_euclidean) / (R_head * (1 - e))
 
     This expression is independent of the fire heading angle. It also shows why
     reducing cell size alone does not guarantee removal of lattice bias when the
@@ -104,9 +104,7 @@ def homogeneous_ellipse_lattice_arrival_error_s(
         topology=topology,
     )
     euclidean_distance = hypot(drow, dcol) * cell_size_m
-    return (lattice_distance - euclidean_distance) / (
-        head_spread_rate_m_s * (1.0 - eccentricity)
-    )
+    return (lattice_distance - euclidean_distance) / (head_spread_rate_m_s * (1.0 - eccentricity))
 
 
 def analytical_ellipse_arrival_times(
