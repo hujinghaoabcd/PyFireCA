@@ -1,8 +1,10 @@
 """Benchmark immediate-neighbor CA arrival against a continuous ellipse reference.
 
-Run from an installed/editable PyFireCA environment::
+Examples::
 
-    python benchmarks/ca_discretization.py
+    python benchmarks/ca_discretization.py --mode baseline
+    python benchmarks/ca_discretization.py --mode heading --shape 51
+    python benchmarks/ca_discretization.py --mode cell-size --half-extent-m 300
 
 This benchmark is deterministic. It compares the same validated homogeneous
 FM1 directional behavior under VN4 and Moore8 raster-edge topologies while
@@ -12,6 +14,7 @@ cell-center arrival reference.
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from math import isclose, isfinite
 
@@ -214,8 +217,42 @@ def _print_results(results: list[BenchmarkResult]) -> None:
         )
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--mode",
+        choices=("baseline", "heading", "cell-size"),
+        default="baseline",
+    )
+    parser.add_argument("--shape", type=int, default=101, help="odd square side for baseline/heading")
+    parser.add_argument("--cell-size-m", type=float, default=30.0)
+    parser.add_argument("--head-deg", type=float, default=30.0)
+    parser.add_argument("--half-extent-m", type=float, default=600.0)
+    return parser.parse_args()
+
+
 def main() -> None:
-    _print_results(run_neighborhood_comparison())
+    args = _parse_args()
+    if args.shape < 3 or args.shape % 2 == 0:
+        raise SystemExit("--shape must be an odd integer >= 3")
+
+    if args.mode == "baseline":
+        results = run_neighborhood_comparison(
+            shape=(args.shape, args.shape),
+            cell_size_m=args.cell_size_m,
+            head_direction_deg=args.head_deg,
+        )
+    elif args.mode == "heading":
+        results = run_heading_sweep(
+            shape=(args.shape, args.shape),
+            cell_size_m=args.cell_size_m,
+        )
+    else:
+        results = run_cell_size_sweep(
+            half_extent_m=args.half_extent_m,
+            head_direction_deg=args.head_deg,
+        )
+    _print_results(results)
 
 
 if __name__ == "__main__":
