@@ -82,5 +82,8 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/pyfireca/behavior/fbp.py" = ["SIM114"]
+
 [tool.ruff.format]
 docstring-code-format = true

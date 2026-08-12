@@ -25,7 +25,7 @@ class FBPEllipse:
     heading_deg: float
 
     @classmethod
-    def from_computation(cls, result: FBPComputation) -> "FBPEllipse":
+    def from_computation(cls, result: FBPComputation) -> FBPEllipse:
         """Build an ellipse from a detailed FBP computation."""
 
         return cls(
