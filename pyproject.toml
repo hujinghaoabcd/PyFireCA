@@ -13,6 +13,9 @@ dependencies = [
   "PyYAML>=6.0",
 ]
 
+[project.scripts]
+pyfireca = "pyfireca.cli:main"
+
 [project.optional-dependencies]
 gis = [
   "rasterio>=1.3",
