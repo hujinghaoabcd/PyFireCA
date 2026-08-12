@@ -8,11 +8,11 @@
 
 Repository: `hujinghaoabcd/PyFireCA`
 
-PyFireCA is a **wildfire cellular-automata research framework**. It is not intended to become a generic urban CA platform. Urban CA projects were reviewed only to learn GIS data organization, raster contracts, experiment structure, and software engineering.
+PyFireCA is a **wildfire cellular-automata research framework**. It is not intended to become a generic urban CA platform. Urban CA projects are engineering references only: they inform GIS data organization, raster contracts, experiment structure, and software engineering.
 
 Primary research interest: **modify and study the CA itself**.
 
-The architecture therefore protects these extension points:
+Protected CA extension points:
 
 ```text
 State
@@ -23,18 +23,33 @@ Time stepping / scheduler
 
 Fire behavior and GIS are supporting layers, not the definition of the CA engine.
 
-## 2. Reference-project lessons already accepted
+## 2. Scope decisions already made
+
+Do not casually reverse these decisions without updating `docs/DESIGN.md` and explaining the scientific reason.
+
+1. PyFireCA is wildfire-specific.
+2. UrbanVCA / PLUS / intPLUS / Mesa-Geo do not become supported urban-model modules.
+3. PyTorchFire-style differentiable CA is deferred.
+4. Level Set and front tracking remain comparison methods, not core propagation engines.
+5. NumPy is the readable scientific reference implementation.
+6. Numba is introduced only after profiling.
+7. Fire behavior and CA propagation remain separate.
+8. GIS file I/O remains outside numerical kernels.
+9. The package tree stays compact until code size/extension pressure justifies splitting files into subpackages.
+10. Development design/status/handoff/validation documents are maintained continuously.
+
+## 3. Reference-project lessons already accepted
 
 ### Cell2Fire
 
-Use as the main wildfire-CA scientific reference for:
+Main wildfire-CA reference for:
 
 - cell-based landscape propagation;
 - ROS-driven cell-to-cell spread;
-- distance/ellipse ideas;
+- distance/ellipse concepts;
 - Monte Carlo landscape experiments.
 
-Do not copy its implementation architecture wholesale. PyFireCA should keep Python modules and interfaces more explicit and testable.
+Do not copy its implementation architecture wholesale.
 
 ### SimFire
 
@@ -43,7 +58,7 @@ Use for:
 - Python simulation-manager ideas;
 - Rothermel-oriented wildfire workflow;
 - mitigation/suppression concepts;
-- separation between environment and simulation objects.
+- environment/simulation separation.
 
 Avoid coupling rendering/game concerns to the numerical kernel.
 
@@ -52,25 +67,24 @@ Avoid coupling rendering/game concerns to the numerical kernel.
 Use for:
 
 - raster fire-model organization;
-- Monte Carlo and richer wildfire-system concerns;
-- performance/scenario thinking.
-
-Do not adopt Clojure-specific architecture simply for similarity.
+- Monte Carlo/scenario ideas;
+- richer wildfire system concerns;
+- later performance comparisons.
 
 ### Pyretechnics
 
 Use mainly for:
 
 - modular fire-behavior equations;
-- clean separation of surface/crown/spot behavior;
-- static + dynamic environmental data abstraction;
-- reference implementation ideas.
+- surface/crown/spot separation;
+- static + dynamic environmental data organization;
+- reference-calculation ideas.
 
-Do **not** adopt its Level Set propagation as PyFireCA's core. PyFireCA remains CA-first.
+Do **not** adopt its Level Set propagation as PyFireCA's core.
 
 ### ELMFIRE / ForeFire
 
-Keep as non-CA comparison baselines. They are not implementation targets for the first development line.
+Keep as non-CA comparison baselines only.
 
 ### UrbanVCA / PLUS / intPLUS
 
@@ -81,36 +95,20 @@ Engineering references only:
 - driving/environmental layer organization;
 - simulation vs assessment separation.
 
-UrbanVCA's flat research-script layout should **not** be copied into PyFireCA.
+UrbanVCA's flat research-script layout should not be copied.
 
 ### Mesa-Geo
 
-Use as a software-engineering reference for:
+Use as a modern Python/GIS engineering reference for:
 
-- Python package hygiene;
-- GIS-aware abstractions;
+- package hygiene;
 - CI / pre-commit / coverage;
-- documentation and contribution standards.
+- documentation and contribution standards;
+- GIS-aware design.
 
 Do not force agent-based abstractions into a raster CA where arrays are more appropriate.
 
-## 3. Explicitly deferred reference
-
-PyTorchFire is intentionally deferred.
-
-Do not introduce in the current development line:
-
-- differentiable CA;
-- Torch backend;
-- JAX backend;
-- GPU abstraction;
-- gradient calibration.
-
-These may be reconsidered only after the classical CA framework is scientifically stable.
-
-## 4. Current architecture
-
-The intended initial source tree is compact:
+## 4. Current implemented source tree
 
 ```text
 src/pyfireca/
@@ -119,59 +117,165 @@ src/pyfireca/
 ├── grid.py
 ├── neighborhood.py
 ├── rules.py
-├── simulation.py
-├── data.py
-├── gis.py
-├── config.py
-├── metrics.py
-└── behavior/
-    ├── __init__.py
-    ├── base.py
-    ├── rothermel.py
-    ├── fbp.py
-    └── fuel.py
+└── simulation.py
 ```
 
-Important: this is a target boundary, not a requirement to create empty files. Add files when the corresponding milestone starts.
-
-## 5. Core design contract
-
-### State
-
-States are explicit enums/codes, not magic integers. Initial state set:
+Current examples/tests:
 
 ```text
-UNBURNABLE
-UNBURNED
-BURNING
-BURNED
+examples/
+└── minimal.py
+
+tests/
+├── test_grid.py
+├── test_neighborhood.py
+├── test_rules.py
+├── test_simulation.py
+└── test_state.py
 ```
 
-### Grid
+Planned files such as `data.py`, `gis.py`, `config.py`, `metrics.py`, and `behavior/` should be added only when their milestone starts. Do not create empty placeholder modules merely to match a diagram.
 
-Initial implementation is a raster grid. Do not prematurely add hex/vector/grid subclasses until real use requires them.
+## 5. Current CA behavior
 
-### Neighborhood
+### `FireState`
 
-Must be replaceable independently of simulation. Start with Moore and Von Neumann. Radius/directional/adaptive variants come later.
+Implemented state set:
 
-### Transition rule
+```text
+UNBURNABLE = 0
+UNBURNED   = 1
+BURNING    = 2
+BURNED     = 3
+```
 
-This is the main research extension point. A rule changes state using current state, neighbors, environment, behavior output, time, and optionally RNG.
+`validate_state_array()` requires a two-dimensional integer array and rejects unsupported state codes.
 
-### Fire behavior
+### `RasterGrid`
 
-Rothermel/FBP calculate physical or empirical fire-behavior quantities. They do not directly own the CA simulation loop.
+Implemented:
 
-### Simulation
+- state validation;
+- `shape` property;
+- optional positive `cell_size`;
+- safe state replacement with shape checking;
+- independent copy.
 
-Orchestration only. `Simulation` should not contain branches that select fire-behavior models or GIS formats.
+No CRS/transform metadata yet. Those belong to the upcoming GIS/data contract.
 
-### Data/GIS
+### Neighborhoods
 
-The kernel consumes arrays/domain objects. File paths are resolved outside it. Raster compatibility must be checked explicitly.
+Implemented:
 
-## 6. Performance contract
+- `Neighborhood` structural protocol;
+- `MooreNeighborhood(radius=...)`;
+- `VonNeumannNeighborhood(radius=...)`;
+- `valid_neighbor_indices(...)`.
+
+Current boundary semantics are **clipping**: off-grid neighbors are omitted.
+
+### `TransitionRule`
+
+Implemented as a synchronous protocol:
+
+```python
+next_state(grid, *, rng) -> array
+```
+
+The rule reads the current grid and returns a complete next-state array. `Simulation` applies it only after computation finishes.
+
+This means newly updated cells do not influence other cells within the same step unless a future scheduler explicitly changes that policy.
+
+### `NeighborIgnitionRule`
+
+Implemented as the first transparent wildfire CA reference rule:
+
+```text
+BURNING cell
+    ↓
+becomes BURNED next step
+    +
+currently UNBURNED neighbors become BURNING
+```
+
+It contains **no Rothermel/FBP physics**. This is intentional. It is a baseline for validating CA semantics and neighborhood substitution.
+
+### `Simulation`
+
+Implemented:
+
+- `Simulation.from_seed(...)`;
+- explicit `numpy.random.Generator`;
+- `step()`;
+- `run(steps)`;
+- shape/state validation of rule output;
+- explicit synchronous replacement semantics.
+
+## 6. Test / CI state
+
+The GitHub Actions workflow contains:
+
+- Ruff lint;
+- Ruff format check;
+- pytest + coverage in the quality job;
+- pytest matrix for Python 3.11, 3.12, 3.13.
+
+During bootstrap CI correctly found two style problems:
+
+1. one 101-character line in `grid.py`;
+2. one Ruff-format mismatch in `tests/test_rules.py`.
+
+Both were corrected.
+
+The Python 3.11/3.12/3.13 test jobs have been passing. An English-README-era run completed fully green after the style fixes; later documentation-only commits continue to trigger the same CI.
+
+If the next session begins with a red CI badge, inspect the newest run before changing scientific code.
+
+## 7. Engineering files already present
+
+```text
+.github/workflows/ci.yml
+.pre-commit-config.yaml
+.gitignore
+pyproject.toml
+CITATION.cff
+CHANGELOG.md
+CONTRIBUTING.md
+README.md
+README.zh-CN.md
+```
+
+`pyproject.toml` currently uses:
+
+- Python `>=3.11`;
+- Hatchling;
+- NumPy core dependency;
+- optional `gis` extra for Rasterio;
+- optional `dev` extra for pytest/coverage/Ruff/pre-commit.
+
+## 8. Documentation contract
+
+Living documents:
+
+```text
+docs/DESIGN.md
+docs/DEVELOPMENT.md
+docs/STATUS.md
+docs/HANDOFF.md
+docs/VALIDATION.md
+```
+
+README is the landing page. Detailed scientific assumptions, derivations, validation protocols, and developer continuation details belong under `docs/`.
+
+RepoForge philosophy to preserve:
+
+- scientific-python / standard style;
+- README remains representative and runnable;
+- validation and limitations are explicit;
+- hand-edited scientific body prose must not be casually overwritten by a template tool;
+- if RepoForge managed sections are applied later, prefer managed header regions rather than whole-file ownership.
+
+## 9. Performance contract
 
 Do not begin with C++, Cython, CUDA, Torch, or JAX.
 
@@ -180,16 +284,16 @@ Development order:
 ```text
 readable NumPy reference
       ↓
-scientific tests + regression tests
+scientific/regression tests
       ↓
 profiling
       ↓
 Numba only for measured hotspots
 ```
 
-Keep the reference implementation even after optimization so numerical equivalence can be tested.
+Keep the NumPy reference after optimization so equivalence can be tested.
 
-## 7. Data contract direction
+## 10. Data-model direction
 
 Prefer structure-of-arrays:
 
@@ -205,7 +309,7 @@ moisture    [T, Y, X]
 
 Do not create one heavyweight Python object per raster cell.
 
-GIS compatibility checks should eventually cover:
+Future GIS compatibility checks should cover:
 
 ```text
 CRS
@@ -214,78 +318,64 @@ resolution
 transform
 extent
 NoData
-units where important
+units where scientifically important
 ```
 
-## 8. Documentation/repository standard
+## 11. Immediate next implementation target
 
-The project follows the same documentation philosophy as RepoForge:
+Do **not** jump directly into the full Rothermel or FBP equations.
 
-- README is the landing page, not the manual;
-- scientific method details and validation live under `docs/`;
-- README should stay representative and runnable;
-- validation and limitations must be explicit;
-- development-stage documents are kept current.
-
-The project is expected to use the RepoForge `scientific-python / standard` profile once the first scaffold settles.
-
-## 9. What has already been created
-
-At the time of this handoff:
-
-- `README.md`;
-- `README.zh-CN.md`;
-- `pyproject.toml`;
-- `docs/DESIGN.md`;
-- `docs/DEVELOPMENT.md`;
-- `docs/STATUS.md`;
-- this `docs/HANDOFF.md`.
-
-The bootstrap pass continues after this file with validation, core code, tests, and CI.
-
-## 10. Immediate next implementation order
-
-Continue in this order unless a concrete bug requires otherwise:
+First establish the common fire-behavior boundary:
 
 ```text
-1. FireState
-2. Neighborhood base behavior
-3. MooreNeighborhood
-4. VonNeumannNeighborhood
-5. tests for exact offsets and invalid radius
-6. RasterGrid shape/state validation
-7. TransitionRule protocol/ABC
-8. minimal synchronous Simulation
-9. explicit RNG
-10. one deterministic regression example
+FireBehaviorResult
+      ↓
+FireBehaviorModel protocol
+      ↓
+minimal environmental input contract
+      ↓
+reference tests
 ```
 
-Do not start Rothermel/FBP before steps 1–8 are understandable and tested.
+The purpose is to ensure Rothermel and FBP can both feed CA rules through one stable interface.
 
-## 11. Questions that still require explicit design decisions
+Recommended next files:
 
-These are deliberately open and should be resolved with tests/documentation when their milestone begins:
+```text
+src/pyfireca/behavior/__init__.py
+src/pyfireca/behavior/base.py
+src/pyfireca/data.py
 
-1. Exact boundary semantics: clipped neighbors vs padded/periodic options.
-2. Whether state updates are returned as full arrays, sparse indices, or transition objects.
-3. Initial scheduler semantics beyond synchronous update.
-4. Exact distance-accumulation state required for a Cell2Fire-like rule.
-5. Unit system and common result schema for Rothermel/FBP.
-6. How dynamic weather time indexing maps to simulation time.
-7. GeoTIFF output convention for arrival time and NoData.
+tests/test_behavior_base.py
+tests/test_data.py
+```
 
-Do not hide these decisions in implementation details; record them in `DESIGN.md` when resolved.
+Only create `rothermel.py` after the result/input contracts and units are documented.
 
-## 12. Definition of a good next handoff
+## 12. Open design questions
 
-At the end of every development session, update this file so the next session can answer immediately:
+These remain intentionally unresolved:
+
+1. Exact common output fields/units for Rothermel and FBP.
+2. How dynamic weather time coordinates map to simulation time.
+3. Full-array vs sparse transition representation for later performance work.
+4. Whether future asynchronous/event-driven updating is a scheduler abstraction or a separate simulation class.
+5. Exact additional propagation state needed by a Cell2Fire-like distance-accumulation rule.
+6. GeoTIFF metadata/NoData convention for arrival time and state outputs.
+7. Monte Carlo RNG stream-generation policy.
+
+When one of these is resolved, add a design decision to `docs/DESIGN.md` rather than hiding the choice inside code.
+
+## 13. Definition of a good next handoff
+
+At the end of every development session, this file should answer:
 
 - What changed?
-- What tests pass?
-- What is incomplete?
+- What tests/CI pass?
+- What remains incomplete?
+- What scientific assumptions were introduced?
 - What design decisions were made?
+- What exact module/function should be implemented next?
 - What must not be changed accidentally?
-- What exact file/function should be implemented next?
-- Are there any known scientific or numerical uncertainties?
 
-The handoff should describe repository truth, not plans that were never implemented.
+The handoff must describe repository truth, not aspirational work that was never implemented.
