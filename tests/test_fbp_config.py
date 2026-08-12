@@ -9,7 +9,6 @@ from pyfireca.fbp_config import (
 )
 from pyfireca.run_config import configured_behavior_model, load_run_config
 
-
 FBP_INPUT_NAMES = (
     "fbp_fuel_type",
     "ffmc",
