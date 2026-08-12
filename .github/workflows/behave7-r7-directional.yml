@@ -34,50 +34,51 @@ jobs:
           path = Path("behave-core/src/testBehave/testBehave.cpp")
           source = path.read_text()
           needle = '    std::cout << "Finished testing spread rate in direction of interest\\n\\n";\n'
-          insertion = r'''
-    testName = "PyFireCA pinned FM1 direct-midflame 100 ft/min, zero slope, 90 degrees from head, FromIgnitionPoint";
-    behaveRun.surface.updateSurfaceInputs(
-        1,
-        5.0,
-        5.0,
-        5.0,
-        100.0,
-        100.0,
-        FractionUnits::Percent,
-        100.0,
-        SpeedUnits::FeetPerMinute,
-        WindHeightInputMode::DirectMidflame,
-        0.0,
-        WindAndSpreadOrientationMode::RelativeToUpslope,
-        0.0,
-        SlopeUnits::Percent,
-        0.0,
-        0.0,
-        FractionUnits::Percent,
-        0.0,
-        LengthUnits::Feet,
-        0.0,
-        FractionUnits::Fraction);
-    directionOfInterest = 90.0;
-    surfaceFireSpreadDirectionMode = SurfaceFireSpreadDirectionMode::FromIgnitionPoint;
-    behaveRun.surface.doSurfaceRunInDirectionOfInterest(
-        directionOfInterest,
-        surfaceFireSpreadDirectionMode);
-    std::cout << std::setprecision(17)
-              << "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H="
-              << behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour)
-              << std::endl;
-    observedSpreadRateInDirectionOfInterest = roundToSixDecimalPlaces(
-        behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour));
-    expectedSpreadRateInDirectionOfInterest = 5.227713;
-    reportTestResult(
-        testInfo,
-        testName,
-        observedSpreadRateInDirectionOfInterest,
-        expectedSpreadRateInDirectionOfInterest,
-        error_tolerance);
-
-'''
+          lines = [
+              '    testName = "PyFireCA pinned FM1 direct-midflame 100 ft/min, zero slope, 90 degrees from head, FromIgnitionPoint";',
+              '    behaveRun.surface.updateSurfaceInputs(',
+              '        1,',
+              '        5.0,',
+              '        5.0,',
+              '        5.0,',
+              '        100.0,',
+              '        100.0,',
+              '        FractionUnits::Percent,',
+              '        100.0,',
+              '        SpeedUnits::FeetPerMinute,',
+              '        WindHeightInputMode::DirectMidflame,',
+              '        0.0,',
+              '        WindAndSpreadOrientationMode::RelativeToUpslope,',
+              '        0.0,',
+              '        SlopeUnits::Percent,',
+              '        0.0,',
+              '        0.0,',
+              '        FractionUnits::Percent,',
+              '        0.0,',
+              '        LengthUnits::Feet,',
+              '        0.0,',
+              '        FractionUnits::Fraction);',
+              '    directionOfInterest = 90.0;',
+              '    surfaceFireSpreadDirectionMode = SurfaceFireSpreadDirectionMode::FromIgnitionPoint;',
+              '    behaveRun.surface.doSurfaceRunInDirectionOfInterest(',
+              '        directionOfInterest,',
+              '        surfaceFireSpreadDirectionMode);',
+              '    std::cout << std::setprecision(17)',
+              '              << "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H="',
+              '              << behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour)',
+              '              << std::endl;',
+              '    observedSpreadRateInDirectionOfInterest = roundToSixDecimalPlaces(',
+              '        behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour));',
+              '    expectedSpreadRateInDirectionOfInterest = 5.227713;',
+              '    reportTestResult(',
+              '        testInfo,',
+              '        testName,',
+              '        observedSpreadRateInDirectionOfInterest,',
+              '        expectedSpreadRateInDirectionOfInterest,',
+              '        error_tolerance);',
+              '',
+          ]
+          insertion = "\n".join(lines) + "\n"
           if needle not in source:
               raise SystemExit("Could not locate testDirectionOfInterest insertion point")
           path.write_text(source.replace(needle, insertion + needle, 1))
