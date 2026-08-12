@@ -55,16 +55,31 @@ python -m pip install -e ".[dev]"
 
 ## 快速开始
 
-当前首先建立最小 CA 基础契约，完整林火传播示例将在参考规则验证后加入。
+当前已经具备一个最小可运行的参考 CA：燃烧元胞在下一步变为已燃，并点燃所选邻域内当前仍未燃烧的元胞。这个规则故意不加入 Rothermel/FBP，用来先验证 CA 架构本身。
 
 ```python
-from pyfireca.neighborhood import MooreNeighborhood
-from pyfireca.state import FireState
+import numpy as np
 
-neighborhood = MooreNeighborhood(radius=1)
-print(neighborhood.offsets())
-print(FireState.BURNING)
+from pyfireca import (
+    FireState,
+    MooreNeighborhood,
+    NeighborIgnitionRule,
+    RasterGrid,
+    Simulation,
+)
+
+state = np.full((7, 7), FireState.UNBURNED, dtype=np.uint8)
+state[3, 3] = FireState.BURNING
+
+grid = RasterGrid(state=state, cell_size=30.0)
+rule = NeighborIgnitionRule(MooreNeighborhood(radius=1))
+sim = Simulation.from_seed(grid=grid, rule=rule, seed=42)
+
+sim.run(steps=3)
+print(sim.grid.state)
 ```
+
+完整可运行版本见 [`examples/minimal.py`](examples/minimal.py)。
 
 ## 第一阶段科学范围
 
@@ -80,6 +95,10 @@ print(FireState.BURNING)
 
 第一阶段明确不做：可微 CA、PyTorch/JAX backend、Level Set、Front Tracking、CFD、城市模拟、Web UI 和分布式服务。
 
+## 验证
+
+科学验证是项目一级要求，不放到“最后再补”。计划包括邻域不变量、确定性回归案例、火行为参考计算、网格/时间步敏感性、方向偏差以及与参考模型的对照。见 [`docs/VALIDATION.md`](docs/VALIDATION.md)。
+
 ## 开发阶段文档
 
 以下文档必须与代码同步维护：
@@ -89,6 +108,10 @@ print(FireState.BURNING)
 - [`docs/STATUS.md`](docs/STATUS.md)：当前状态、已完成与进行中事项；
 - [`docs/HANDOFF.md`](docs/HANDOFF.md)：下一次开发可直接接手的详细交接；
 - [`docs/VALIDATION.md`](docs/VALIDATION.md)：科学与数值验证计划。
+
+## 引用
+
+软件引用元数据见 [`CITATION.cff`](CITATION.cff)。
 
 ## 项目状态
 
