@@ -1,6 +1,6 @@
 # Rothermel Reference Implementation
 
-> Status: **R1–R4 implemented for static surface fuels**
+> Status: **R1–R8 implemented for the current surface-fire reference path**
 >
 > Updated: 2026-08-12
 
@@ -11,27 +11,32 @@ Rothermel is the first fire-behavior family implemented as a readable scientific
 Current boundary:
 
 ```text
-RothermelFuelModel + RothermelFuelMoisture + wind/slope/aspect
+fuel + moisture + midflame wind + slope + aspect
                          ↓
                    RothermelInputs
                          ↓
                   RothermelModel
                          ↓
-                 FireBehaviorResult
+         maximum ROS + maximum direction
                          ↓
-                  CA transition rule
+             Behave-aligned surface ellipse
+                         ↓
+             direction-specific edge ROS
+                         ↓
+          physical travel / earliest arrival
 ```
 
-Fire-behavior equations remain separate from CA propagation.
+Fire-behavior equations, directional geometry, raster input adaptation, and CA/event propagation remain separate layers.
 
-## 2. Scientific references and validation software
+## 2. Scientific references and pinned validation software
 
 Primary scientific references:
 
 1. Rothermel (1972), USDA Forest Service Research Paper INT-115.
 2. Albini (1976), USDA Forest Service GTR INT-30.
-3. Andrews (2018), USDA Forest Service RMRS-GTR-371, DOI `10.2737/RMRS-GTR-371`.
+3. Catchpole et al. (1982), elliptical directional-spread relation used by the pinned Behave path.
 4. Scott & Burgan (2005), USDA Forest Service RMRS-GTR-153, DOI `10.2737/RMRS-GTR-153`.
+5. Andrews (2018), USDA Forest Service RMRS-GTR-371, DOI `10.2737/RMRS-GTR-371`.
 
 Pinned official operational regression source:
 
@@ -39,11 +44,11 @@ Pinned official operational regression source:
 firelab/behave-app
 a3cfcd5903188d73445948af16644868225bb9d5
 
-firelab/behave core
+firelab/behave
 29888c7ad364aa18cfb340f4c25a8e395f24260f
 ```
 
-PyFireCA independently implements the equations and uses the pinned software only as an external numerical reference.
+PyFireCA independently implements the equations and uses pinned Behave only as an external numerical reference.
 
 Evidence grades:
 
@@ -54,7 +59,7 @@ Grade C  independent software comparison
 Grade D  internal analytical/synthetic fixture
 ```
 
-## 3. Public fuel and unit contracts
+## 3. Public fuel and unit contract
 
 Fixed six-class order:
 
@@ -77,13 +82,13 @@ Public SI units:
 | heat content | J/kg |
 | particle density | kg/m³ |
 | moisture | dry-mass fraction |
-| wind | m/s |
+| midflame wind | m/s |
 | slope | degrees |
-| direction | degrees clockwise from north |
+| direction | degrees clockwise from geographic north |
 
-Published ft/lb/Btu/min correlations are evaluated only after explicit conversion through `behavior/_units.py`.
+Published ft/lb/Btu/min correlations are evaluated only after explicit conversion through `_units.py`.
 
-`RothermelInputs` receives **midflame wind** directly. 10-m/20-ft wind adjustment is an external preprocessing concern.
+`RothermelInputs` receives **midflame wind directly**. 10-m/20-ft wind adjustment remains preprocessing.
 
 Direction semantics:
 
@@ -94,18 +99,16 @@ wind push              wind_from + 180°
 upslope                 aspect + 180°
 ```
 
-These conversions live in `_directions.py`; raster row orientation never changes geographic angle semantics.
+## 4. R1 — heterogeneous fuel-bed quantities
 
-## 4. R1 — heterogeneous fuel-bed quantities — complete
-
-Implemented in `behavior/rothermel.py`:
+Implemented and tested:
 
 ```text
-compute_surface_area_weights
-compute_characteristic_sav_m_inv
-compute_packing_ratio
-compute_bulk_density_kg_m3
-compute_optimum_packing_ratio
+surface-area weights
+characteristic SAV
+packing ratio
+bulk density
+optimum packing ratio
 ```
 
 Surface-area weighting uses relative area proportional to:
@@ -114,259 +117,104 @@ Surface-area weighting uses relative area proportional to:
 SAV × oven-dry load / particle density
 ```
 
-Synthetic hand-computable tests verify within-dead/live and dead/live-category weighting independently.
+Synthetic hand-computable tests verify within-life-state and dead/live category weighting independently.
 
-## 5. R2 formulation — Albini-adjusted Rothermel
+## 5. R2 — Albini-adjusted base ROS — Grade B
 
-The implementation explicitly follows the operational **Albini-adjusted Rothermel** line.
+PyFireCA explicitly follows the **Albini-adjusted Rothermel** operational line.
 
-Locked Albini adjustments include:
-
-### A1 — combustible loading
+Key adjustments locked into the reference include:
 
 ```text
-w_n = w_0 × (1 - S_T)
+combustible loading
+Albini reaction-velocity exponent
+live moisture of extinction
+separate dead/live reaction-intensity contributions
 ```
 
-### A2 — reaction-velocity exponent
-
-```text
-A = 133 × sigma^-0.7913
-```
-
-with `sigma` in inverse feet for this empirical relation.
-
-### A3 — live moisture of extinction
-
-```text
-fine_dead = Σ load_dead × exp(-138 / SAV_dead)
-fine_live = Σ load_live × exp(-500 / SAV_live)
-```
-
-followed by the Albini live-Mx relation and dead-Mx lower bound.
-
-### A4 — dead/live reaction intensity
-
-Dead and live contributions are calculated separately and added at the final reaction-intensity stage.
-
-## 6. R2 implementation — complete for static fuels
-
-`behavior/_rothermel_equations.py` contains independently testable functions for:
+The common R1/R2 chain includes:
 
 ```text
 combustible/net load
-SAV size-bin weighted combustible load
+SAV size-bin weighted load
 mineral damping
 moisture damping
 live moisture of extinction
-Albini reaction-velocity exponent
-maximum reaction velocity
-actual reaction velocity
-reaction intensity
+reaction velocity / intensity
 propagating flux
 heat of preignition
 effective heating number
-preignition heat term
 heat sink
-no-wind/no-slope spread rate
+no-wind/no-slope ROS
 ```
 
-Operational SAV load bins use the native inverse-foot boundaries:
+Pinned Grade B references:
 
 ```text
->= 1200
->= 192
->= 96
->= 48
->= 16   1/ft
-```
-
-`behavior/_rothermel_base.py` assembles the R1 and R2 stages.
-
-It exposes:
-
-```text
-BaseSpreadResult
-compute_base_spread_result(...)
-compute_base_spread_rate_m_s(...)
-```
-
-The richer result carries downstream quantities such as reaction intensity, characteristic SAV, packing ratios, propagating flux, and heat sink without recomputing R2.
-
-## 7. Grade B base-ROS validation — complete
-
-### FM1 — dead-only
-
-Pinned inputs include:
-
-```text
-fuel-bed depth        1.0 ft
-dead Mx               0.12
-1-h load              0.034 lb/ft²
-1-h SAV               3500 1/ft
-heat content          8000 Btu/lb
-particle density      32 lb/ft³
-total mineral         0.0555
-effective mineral     0.01
-dead moisture         5/5/5 %
-midflame wind         0
-slope                 0
-```
-
-Pinned official Behave result:
-
-```text
-4.4262698923571939 chains/hour
+FM1 dead-only
+4.4262698923571939 chains/h
 0.024733996158492002 m/s
-```
 
-### FM2 — static dead + live
-
-FM2 is used to validate live-fuel heterogeneity without dynamic curing/load transfer.
-
-Pinned official Behave result:
-
-```text
-2.3810521029916596 chains/hour
+FM2 static dead + live
+2.3810521029916596 chains/h
 0.013305319151517395 m/s
 ```
 
-The pinned FM2 live moisture of extinction is:
+FM2 validates static heterogeneous dead/live weighting and live moisture-of-extinction behavior without dynamic curing.
+
+## 6. R3 — wind, slope, and maximum-spread vector
+
+Pinned Grade B references:
 
 ```text
-11.63009861291455 dry-mass fraction
+FM1, 30% slope, zero wind
+20.817222076028628 chains/h
+
+FM1, zero slope, 100 ft/min DirectMidflame wind
+8.834274755440232 chains/h
+
+FM1, 30% slope + perpendicular 100 ft/min wind push
+21.399596624626479 chains/h maximum ROS
 ```
 
-This validates static dead/live weighting, size-bin loading, live Mx, moisture damping, dead/live reaction addition, heat sink, and final base ROS together.
-
-## 8. R3a — slope — Grade B validated
-
-Pinned case:
+Implemented:
 
 ```text
-FM1
-dead moisture 5/5/5%
-30% slope
-zero wind
+slope factor
+wind factor
+effective-wind inversion
+optional operational wind-speed limit
+non-collinear wind/slope vector composition
+maximum-spread geographic direction
 ```
 
-Official result:
-
-```text
-20.817222076028628 chains/hour
-```
-
-Public PyFireCA input converts 30% slope to:
-
-```text
-atan(0.3) = 16.69924423399362 degrees
-```
-
-The scalar relation is:
-
-```text
-phi_s = 5.275 * beta^-0.3 * tan(slope)^2
-```
-
-## 9. R3b — wind — Grade B validated
-
-Pinned case:
-
-```text
-FM1
-zero slope
-100 ft/min direct-midflame wind
-```
-
-Official result:
-
-```text
-8.834274755440232 chains/hour
-```
-
-The operational wind correlation is evaluated in its native units:
-
-```text
-C = 7.47 * exp(-0.133 * sigma^0.55)
-B = 0.02526 * sigma^0.54
-E = 0.715 * exp(-0.000359 * sigma)
-
-phi_w = C * U^B * (beta / beta_op)^(-E)
-```
-
-with `sigma` in 1/ft and `U` in ft/min.
-
-## 10. R3c — effective wind and optional wind limit
-
-PyFireCA implements:
-
-```text
-compute_effective_wind_speed_m_s
-compute_wind_speed_limit_m_s
-apply_wind_speed_limit
-```
-
-The operational limit is optional and **disabled by default**.
-
-FM1 reference quantities:
-
-```text
-reaction intensity     159495.8270605292 W/m²
-wind-speed limit       758.3986638051593 ft/min
-                       3.85266521213021 m/s
-limited high-wind ROS  1.6614603649165824 m/s
-```
-
-The pinned official workflow validates the ROS produced at the calculated boundary wind speed:
-
-```text
-297.3264790473483 chains/hour
-```
-
-Python tests independently validate the enable/disable, threshold, inversion, and capping behavior. The official workflow intentionally avoids a custom C++ probe.
-
-## 11. R3d — non-collinear wind+slope vector — Grade B magnitude validated
-
-For non-collinear effects, scalar addition is not valid.
+Non-collinear effects use:
 
 ```text
 slope_rate = R0 * phi_s
 wind_rate  = R0 * phi_w
-
 x = slope_rate + wind_rate*cos(delta)
 y = wind_rate*sin(delta)
-additional = hypot(x, y)
-Rmax = R0 + additional
+Rmax = R0 + hypot(x, y)
 ```
 
-Pinned perpendicular case:
+The perpendicular maximum-spread **magnitude** is independently Grade B. Direction is source-aligned and analytically tested but not falsely promoted to a separate Grade B direction observation.
+
+### Wind-limit detail
+
+The operational limit is optional and disabled by default.
+
+When enabled and exceeded:
 
 ```text
-FM1
-30% slope
-100 ft/min direct-midflame wind
-wind push 90° from upslope
+effective_wind_speed_m_s = wind_speed_limit_m_s
 ```
 
-Expected and official Behave maximum ROS:
+This matters beyond forward ROS because the surface ellipse uses effective wind to determine L/W.
 
-```text
-21.399596624626479 chains/hour
-```
+## 7. R4 — public behavior model
 
-The dedicated `.github/workflows/behave7-r3-vector.yml` regression passes.
-
-The corresponding PyFireCA analytical direction is:
-
-```text
-15.052373502770299° clockwise from upslope
-```
-
-Direction is verified analytically and aligned to the Behave vector source path. The external CSV regression validates maximum-spread **magnitude**, so direction is not mislabelled as Grade B external output.
-
-## 12. R4 — public model assembly — complete
-
-`behavior/rothermel_model.py` implements:
+Public assembly:
 
 ```text
 RothermelModel.compute(RothermelInputs)
@@ -374,36 +222,16 @@ RothermelModel.compute(RothermelInputs)
 FireBehaviorResult
 ```
 
-Assembly order:
-
-```text
-validated BaseSpreadResult
-        ↓
-phi_s + phi_w
-        ↓
-non-collinear vector composition
-        ↓
-effective wind
-        ↓
-optional wind limit
-        ↓
-relative-to-upslope direction
-        ↓
-geographic bearing
-        ↓
-FireBehaviorResult
-```
-
-Current cross-model outputs:
+Stable cross-model outputs:
 
 ```text
 spread_rate_m_s
 spread_direction_deg
 ```
 
-When both wind and slope directional effects are zero, `spread_direction_deg=None`; PyFireCA does not invent a head direction for an isotropic base-ROS case.
+Zero wind + zero slope returns `spread_direction_deg=None` rather than inventing a head direction for an isotropic case.
 
-The following are intentionally still unset:
+The following remain intentionally unset:
 
 ```text
 fireline_intensity_w_m = None
@@ -412,92 +240,285 @@ flame_length_m = None
 
 They require separate output-equation validation.
 
-Rothermel-specific diagnostics include:
+Rothermel-specific intermediates stay in `diagnostics` rather than polluting the shared behavior API.
+
+## 8. R5 — dynamic herbaceous curing/load transfer — Grade B
+
+Pinned operational transfer rule:
 
 ```text
-base_spread_rate_m_s
-reaction_intensity_w_m2
-characteristic_sav_m_inv
-packing_ratio
-relative_packing_ratio
-wind_factor
-slope_factor
-effective_factor
-effective_wind_speed_m_s
-wind_speed_limit_m_s
-wind_limit_enabled
-wind_limit_exceeded
+M_live_herb < 0.30       transfer = 1.0
+0.30 <= M <= 1.20       transfer = 1.333 - 1.11*M
+M > 1.20                 transfer = 0.0
 ```
 
-End-to-end tests cover base, slope-only, wind-only, perpendicular wind+slope, high-wind limiting, dynamic-fuel rejection, and API type validation.
+Operational semantics retained:
 
-## 13. Reproducible official workflows
+- transferred dead herb inherits live-herb SAV;
+- dead-herb physical properties use dead-fuel properties;
+- transferred dead herb uses dead 1-h moisture;
+- herbaceous load is conserved;
+- redistribution occurs before the shared R1/R2 chain.
+
+Pinned GR1 case:
+
+```text
+fuel model            101 / GR1
+dead moisture         5/5/5 %
+live herb moisture    60 %
+live woody moisture   90 %
+wind                   0
+slope                  0
+
+0.71419316836403091 chains/h
+0.003990911424818205 m/s
+```
+
+`RothermelModel.compute()` reproduces this result end to end.
+
+## 9. Audited standard-fuel catalogue
+
+Public module:
+
+```text
+pyfireca.behavior.fuel_catalog
+```
+
+Current deliberately limited audited subset:
+
+```text
+1    FM1
+2    FM2
+101  GR1
+```
+
+Native pinned source values are stored first and converted explicitly to the SI `RothermelFuelModel` contract.
+
+Unknown model numbers fail explicitly as not audited yet. PyFireCA does not pretend the full Anderson 13 / Scott–Burgan 40 catalogue has already been reviewed.
+
+## 10. R7 — Behave-aligned surface ellipse and off-axis ROS — Grade B
+
+Surface length-to-width relation:
+
+```text
+L/W = 0.936 exp(0.1147 U) + 0.461 exp(-0.0692 U) - 0.397
+```
+
+where effective wind `U` is in mph and surface `L/W` is capped at 8.
+
+Then:
+
+```text
+e = sqrt((L/W)^2 - 1) / (L/W)
+R_back = R_head * (1 - e) / (1 + e)
+R_flank = (R_head + R_back) / (2 * L/W)
+```
+
+Pinned Behave `FromIgnitionPoint` radial relation:
+
+```text
+R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
+```
+
+`beta=0°` is heading; `beta=180°` is backing.
+
+Dedicated pinned case:
+
+```text
+FM1
+100 ft/min DirectMidflame wind
+zero slope
+90° from head
+FromIgnitionPoint
+```
+
+Official full-precision result:
+
+```text
+5.2277130003983068 chains/h
+0.02921246024622574 m/s
+```
+
+The dedicated workflow verifies the raw value and official suite state:
+
+```text
+172 performed
+172 passed
+0 failed
+```
+
+The 90° radial result is therefore Grade B.
+
+Known FM1 100 ft/min directional values used in tests:
+
+```text
+east head       0.04936592733340002 m/s
+north/south     0.02921246024622574 m/s
+west backing    0.02074385430924511 m/s
+NE/SE 45°       0.041067604539224284 m/s
+```
+
+PyFireCA does not use `head_ROS*cos(theta)` as an off-axis shortcut.
+
+## 11. R7/R8 — bridge from behavior to raster edges
+
+### Homogeneous provider
+
+```text
+HomogeneousRothermelDirectionalSpreadRate
+```
+
+It caches one behavior + ellipse and maps each north-up neighbor offset to a geographic bearing and then to `FromIgnitionPoint` directional ROS.
+
+### Static heterogeneous provider
+
+```text
+StaticSpatialRothermelDirectionalSpreadRate
+```
+
+Contract:
+
+```text
+inputs_provider(row, col) -> RothermelInputs
+```
+
+One behavior + ellipse is cached per source cell.
+
+Current baseline edge semantic:
+
+> **The source cell determines outgoing edge ROS.**
+
+No source-target averaging is hidden in this provider.
+
+Tests explicitly change wind direction between adjacent source cells so successive outgoing edges use different head/backing behavior.
+
+## 12. R8 — raster input and landscape assembly
+
+Raster input API:
+
+```text
+RothermelRasterLayerNames
+StaticRasterRothermelInputsProvider
+```
+
+Default strict units:
+
+```text
+fuel_model                   code / None
+dead_1h_moisture             fraction
+dead_10h_moisture            fraction
+dead_100h_moisture           fraction
+live_herbaceous_moisture     fraction
+live_woody_moisture          fraction
+midflame_wind_speed          m/s
+wind_from_direction          deg
+slope                        deg
+aspect                       deg
+```
+
+No hidden conversion is performed for moisture percentages, percent slope, wind height, or angular conventions.
+
+Required values are checked only inside the explicit simulation domain. Domain-exterior NoData is legal; domain-interior missing/non-finite behavior input fails fast.
+
+Landscape convenience factory:
+
+```text
+build_static_raster_rothermel_arrival_solver(...)
+```
+
+Assembly:
+
+```text
+LandscapeInput
+→ typed per-cell Rothermel inputs
+→ static heterogeneous directional provider
+→ StaticArrivalTimeSolver
+```
+
+Current geometry is deliberately limited to north-up square rasters with explicit metric `cell_size_m` matching affine pixel size. Rotated, sheared, rectangular, or mismatched grids fail closed.
+
+Detailed workflow:
+
+```text
+docs/STATIC_RASTER_WORKFLOW.md
+examples/static_raster_rothermel.py
+```
+
+## 13. Physical arrival boundary
+
+Physical travel time remains:
+
+```text
+travel_time_s = physical_distance_m / direction_specific_ROS_m_s
+```
+
+`StaticArrivalTimeSolver` assumes edge travel times are static and non-negative. It must not be reused unchanged for time-varying weather by mutating cached provider state.
+
+The original synchronous `Simulation` remains a separate reference CA path; no hidden physical `dt` has been assigned to one synchronous step.
+
+## 14. Reproducible official workflows
 
 ```text
 .github/workflows/behave7-r2-probe.yml
 .github/workflows/behave7-r3-vector.yml
+.github/workflows/behave7-r5-dynamic-probe.yml
+.github/workflows/behave7-r7-directional.yml
 ```
 
-The first verifies:
+These cover base ROS, wind/slope, dynamic GR1 curing, and off-axis radial spread respectively.
+
+## 15. Current scope boundary
+
+**Implemented and validated enough for controlled CA research:**
 
 ```text
-FM1 base
-FM2 static live-fuel base
-FM1 slope-only
-FM1 wind-only
-FM1 wind-limit boundary
-```
-
-The second verifies the perpendicular wind+slope maximum ROS.
-
-The only modification made to the upstream official `testSurface` source is additional output precision where needed; scientific equations are not patched.
-
-## 14. Current scope boundary
-
-**Implemented and validated enough for CA coupling:**
-
-```text
-static heterogeneous surface-fuel base ROS
-wind effect
-slope effect
-non-collinear maximum-spread magnitude
-explicit geographic maximum-spread direction
-optional operational wind limit
-public RothermelModel output
+static/dynamic-herbaceous surface-fuel Rothermel behavior
+wind + slope maximum-spread behavior
+off-axis surface ellipse
+static directional neighbor ROS
+physical edge travel time
+static earliest arrival
+static spatially heterogeneous raster inputs
+north-up square-raster landscape assembly
 ```
 
 **Not yet implemented/validated:**
 
 ```text
-dynamic herbaceous curing/load transfer
-standard fuel catalogue provenance as a public catalogue API
+full standard-fuel catalogue
+source-target/interface edge coupling alternatives
+affine-aware rotated/non-square geometry
+time-dependent weather scheduler
 fireline intensity output
 flame length output
-off-axis elliptical directional spread
+FBP
 crown fire
 spotting
+suppression
 ```
 
-## 15. Next scientific stage
+## 16. Next scientific stage
 
-The next step is not more R2 algebra. It is:
+The next useful work is not more Rothermel algebra. Keep the behavior reference fixed and study CA discretization:
 
 ```text
-verified standard fuel catalogue
+source-cell edge ROS baseline                       ✓
         ↓
-dynamic herbaceous curing/load transfer
+explicit source/target interface variants
         ↓
-behavior-informed CA rule
+4 / 8 / extended neighborhoods
         ↓
-continuous ROS/direction → neighbor travel/arrival time
+cell-size sensitivity
         ↓
-spread-shape and arrival-time validation
+lattice directional bias
+        ↓
+arrival-time + perimeter/shape error
 ```
 
-The CA layer should consume `FireBehaviorResult`; `Simulation` must not branch on the string/name of the behavior model.
+Only after a controlled static benchmark exists should PyFireCA design a time-dependent weather scheduler. Dynamic weather violates the static shortest-path assumption because an edge's ROS may change while fire is traversing it.
 
-## 16. Validation discipline
+## 17. Validation discipline
 
-Do not weaken tolerances, mix equation variants, or overwrite external fixtures merely to make tests pass.
+Do not weaken tolerances, mix equation variants, overwrite pinned fixtures, or silently alter edge semantics merely to make a test pass.
 
-When evidence differs, label it explicitly rather than upgrading an internal analytical check to Grade B/A without an independent external output.
+When evidence differs, label it explicitly rather than upgrading an analytical/internal check to Grade B/A without independent external output.
