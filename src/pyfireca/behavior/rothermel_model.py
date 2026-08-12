@@ -66,9 +66,7 @@ class RothermelModel:
                     "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                     "packing_ratio": base.packing_ratio,
                     "relative_packing_ratio": base.relative_packing_ratio,
-                    "dynamic_herbaceous_transfer_fraction": (
-                        base.dynamic_herbaceous_transfer_fraction
-                    ),
+                    "dynamic_herbaceous_transfer_fraction": (base.dynamic_herbaceous_transfer_fraction),
                     "dynamic_herbaceous_transferred_load_kg_m2": (
                         base.dynamic_herbaceous_transferred_load_kg_m2
                     ),
@@ -134,9 +132,7 @@ class RothermelModel:
                 "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                 "packing_ratio": base.packing_ratio,
                 "relative_packing_ratio": base.relative_packing_ratio,
-                "dynamic_herbaceous_transfer_fraction": (
-                    base.dynamic_herbaceous_transfer_fraction
-                ),
+                "dynamic_herbaceous_transfer_fraction": (base.dynamic_herbaceous_transfer_fraction),
                 "dynamic_herbaceous_transferred_load_kg_m2": (
                     base.dynamic_herbaceous_transferred_load_kg_m2
                 ),
