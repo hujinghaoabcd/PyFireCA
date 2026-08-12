@@ -35,14 +35,29 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - `RothermelFuelMoisture` with explicit dry-mass-fraction inputs and six-class expansion.
 - `RothermelInputs` with midflame wind, meteorological wind-from direction, slope, and aspect conventions.
 - Central `behavior/_units.py` conversions between SI and the ft/lb/Btu/min units used by published Rothermel correlations, with round-trip tests.
-- R1 `compute_surface_area_weights()` heterogeneous-fuel weighting.
-- R1 `compute_characteristic_sav_m_inv()` surface-area-weighted characteristic SAV.
-- R1 `compute_packing_ratio()` and `compute_bulk_density_kg_m3()` fuel-bed quantities.
-- R1 `compute_optimum_packing_ratio()` with explicit SI-to-inverse-foot conversion at the legacy correlation boundary.
+- R1 heterogeneous surface-area weighting, characteristic SAV, packing ratio, bulk density, and optimum-packing calculations.
 - Hand-computable R1 regression fixtures plus nonburnable/invalid-input tests.
-- Dedicated Rothermel input-contract tests and `docs/ROTHERMEL_REFERENCE.md` implementation/validation plan.
+- Albini-adjusted R2 pure functions for combustible loading, size-bin weighted loading, mineral/moisture damping, live moisture of extinction, reaction velocity/intensity, propagating flux, preignition heat, heat sink, and base ROS.
+- `BaseSpreadResult` / `compute_base_spread_result()` for carrying validated R2 quantities into later wind/slope stages without recomputing the base chain.
+- Pinned Grade B Behave 7 FM1 dead-only and FM2 static live-fuel base-ROS regressions.
+- R3 slope-factor implementation with a pinned FM1 30% slope Behave regression.
+- R3 wind-factor implementation with a pinned FM1 100 ft/min direct-midflame Behave regression.
+- Effective-wind inversion and explicit optional operational wind-speed limiting.
+- Non-collinear wind/slope vector composition in `_rothermel_vectors.py`.
+- Explicit meteorological wind-from, downwind-push, downslope-aspect, upslope, and geographic-bearing conversion helpers in `_directions.py`.
+- Dedicated pinned Behave 7 non-collinear wind/slope maximum-ROS workflow.
+- Public `RothermelModel.compute(RothermelInputs) -> FireBehaviorResult` assembly, exported from `pyfireca.behavior`.
+- End-to-end Rothermel model tests for base, slope-only, wind-only, perpendicular wind+slope, optional high-wind limiting, dynamic-fuel rejection, and API type checks.
+- Rothermel diagnostics carrying base ROS, reaction intensity, characteristic SAV, packing ratios, wind/slope factors, effective wind, and wind-limit state.
 - Grade A Albini 1976 worked-example fixtures and pinned Grade B Behave 7 surface regression data with provenance/integrity checks.
 - GitHub Actions CI configuration covering quality checks, optional GIS tests, and Python 3.11/3.12/3.13.
+
+### Changed
+
+- The official Behave reference workflow now uses stable `testSurface` regression cases instead of a fragile custom C++ wind-limit probe.
+- Wind-limit validation is separated into an official Behave ROS-at-boundary regression and Python tests for enable/threshold/capping semantics.
+- Zero-wind/zero-slope `RothermelModel` results return `spread_direction_deg=None` rather than inventing a directional head-fire bearing.
+- Rothermel fireline intensity and flame length remain unset in the common output until their output equations are separately validated.
 
 ### Design decisions
 
@@ -58,12 +73,14 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - `LandscapeInput` owns one shared geospatial metadata object while evolving state remains in `RasterGrid`/`Simulation`.
 - State GeoTIFF output uses model state `UNBURNABLE=0` rather than conflating model state with file-level NoData.
 - GIS preprocessing may transform inputs intentionally; CA simulation never silently reprojects/resamples/alters its grid.
-- Rothermel is the first behavior reference implementation; FBP remains planned for Cell2Fire-oriented comparison work.
-- The Rothermel public fuel contract uses a stable six-class representation before equation/catalogue implementation.
+- Rothermel is the first behavior reference implementation; FBP remains planned for later comparison work.
+- The Rothermel public fuel contract uses a stable six-class representation.
 - Rothermel receives midflame wind explicitly; canopy/exposure wind-adjustment logic is kept outside the core model input.
 - Unit conversion and R1 weighting/base calculations are separated from the R2 reaction/heat-transfer chain.
 - The R2 reference variant is explicitly **Albini-adjusted Rothermel** rather than an unlabelled mixture of original Rothermel 1972 and later operational corrections.
-- The Albini-adjusted R2 plan records four material adjustments before code: combustible loading, reaction-velocity exponent, revised live moisture of extinction, and dead/live reaction-intensity combination.
-- R2 no-wind/no-slope equations will not be assembled until an independently reproducible numerical fixture for the selected formulation is documented.
+- Static heterogeneous R2 base ROS is now independently validated against pinned official Behave 7 cases before wind/slope assembly.
+- Non-collinear wind and slope are vector-combined; scalar `1 + phi_w + phi_s` is used only where effects are explicitly collinear.
+- Meteorological wind-from direction is converted explicitly to a downwind fire-push direction before vector composition.
+- The operational wind-speed limit is an explicit option and is disabled by default.
 - External validation values carry evidence grades and pinned provenance.
 - PyTorch/JAX/differentiable CA remain outside the current development scope.
