@@ -22,7 +22,8 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Common generic `FireBehaviorModel[InputT]` protocol.
 - Immutable `FireBehaviorResult` with explicit spread-rate, direction, intensity, and flame-length units/conventions.
 - `SpatialLayer` for static `(Y, X)` and dynamic `(T, Y, X)` numerical environmental data.
-- `EnvironmentalData` with shared spatial/time alignment validation and snapshot access.
+- `EnvironmentalData` with shared spatial/time alignment validation and policy-free snapshot access.
+- `MissingEnvironmentalDataError` and `EnvironmentalData.require_complete_snapshot()` for explicit fail-fast validation of required dynamic/static inputs without interpolation or domain mutation.
 - Explicit `nodata_mask()` utility that uses only declared NoData metadata.
 - `build_domain_mask()` for intentionally deriving a persistent simulation domain from selected static layers.
 - `LandscapeInput` for one shared `RasterMetadata`, aligned environmental layers, and a validated initial CA state.
@@ -53,6 +54,7 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Environmental data remain array-first; physical time interpolation and xarray/Zarr abstractions are deferred until required.
 - NoData remains metadata until a workflow explicitly selects static layers that define the persistent simulation domain.
 - Dynamic weather/moisture NoData cannot silently create permanent `UNBURNABLE` cells.
+- Required environmental snapshots use an explicit fail-fast completeness check; automatic interpolation/filling remains an external preprocessing decision.
 - `LandscapeInput` owns one shared geospatial metadata object while evolving state remains in `RasterGrid`/`Simulation`.
 - State GeoTIFF output uses model state `UNBURNABLE=0` rather than conflating model state with file-level NoData.
 - GIS preprocessing may transform inputs intentionally; CA simulation never silently reprojects/resamples/alters its grid.
@@ -62,6 +64,6 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - Unit conversion and R1 weighting/base calculations are separated from the R2 reaction/heat-transfer chain.
 - The R2 reference variant is explicitly **Albini-adjusted Rothermel** rather than an unlabelled mixture of original Rothermel 1972 and later operational corrections.
 - The Albini-adjusted R2 plan records four material adjustments before code: combustible loading, reaction-velocity exponent, revised live moisture of extinction, and dead/live reaction-intensity combination.
-- R2 no-wind/no-slope equations will not be assembled until authoritative numerical fixtures for the selected formulation are documented.
+- R2 no-wind/no-slope equations will not be assembled until an independently reproducible numerical fixture for the selected formulation is documented.
 - External validation values carry evidence grades and pinned provenance.
 - PyTorch/JAX/differentiable CA remain outside the current development scope.
