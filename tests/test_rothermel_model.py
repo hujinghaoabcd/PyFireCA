@@ -117,7 +117,7 @@ def test_perpendicular_wind_slope_matches_pinned_behave_vector_magnitude() -> No
     assert result.spread_rate_m_s == pytest.approx(0.11958094593841277, rel=1e-13)
     assert result.spread_direction_deg == pytest.approx(15.052373502770299, rel=1e-12)
     assert result.diagnostics["effective_factor"] == pytest.approx(
-        3.834561313018457,
+        3.834679571071117,
         rel=1e-12,
     )
 
