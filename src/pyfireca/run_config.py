@@ -42,8 +42,7 @@ def configured_behavior_model(path: str | Path) -> str:
         raise ValueError(f"unsupported behavior.model {model!r}; expected 'rothermel' or 'fbp'")
     if normalized == "rothermel":
         raise ValueError(
-            "version-1 Rothermel configs use the legacy top-level schema; "
-            "omit the behavior block"
+            "version-1 Rothermel configs use the legacy top-level schema; omit the behavior block"
         )
     return normalized
 
