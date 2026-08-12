@@ -6,6 +6,7 @@ from pyfireca.arrival import (
     StaticArrivalTimeSolver,
     arrival_times_to_state,
 )
+from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_arrival_solver
 from pyfireca.data import LandscapeInput
 from pyfireca.grid import RasterGrid
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
@@ -25,6 +26,7 @@ __all__ = [
     "StaticArrivalTimeSolver",
     "VonNeumannNeighborhood",
     "arrival_times_to_state",
+    "build_static_raster_rothermel_arrival_solver",
 ]
 
 __version__ = "0.1.0a0"
