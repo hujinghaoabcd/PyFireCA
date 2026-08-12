@@ -19,6 +19,7 @@ The project is **not** a generic urban/geospatial CA framework. Urban CA project
 5. **Reproducibility is part of the model contract.** Randomness must be explicit and seeded through `numpy.random.Generator`.
 6. **No premature platform architecture.** Avoid plugins, multiple backends, distributed execution, service layers, or GUI abstractions until a real need exists.
 7. **Documentation evolves with code.** Design, status, validation, and handoff documents are mandatory development artifacts.
+8. **Scientific reference values carry provenance.** External numerical fixtures must identify their source, variant, units, and evidence grade rather than appearing as unexplained constants.
 
 ## 3. Core conceptual model
 
@@ -59,12 +60,13 @@ src/pyfireca/
 └── behavior/
     ├── __init__.py
     ├── base.py
+    ├── _units.py
     ├── rothermel.py
     ├── fbp.py
     └── fuel.py
 ```
 
-This layout is intentionally compact. Files become packages only when their implementation size or extension pressure justifies the split.
+This layout is intentionally compact. Files become packages only when their implementation size or extension pressure justifies the split. The tree above describes ownership boundaries, not a requirement to create empty files before their milestone begins.
 
 ## 5. Component responsibilities
 
@@ -90,16 +92,11 @@ Rules:
 
 ### 5.2 `grid.py`
 
-Owns the spatial lattice specification and state-array shape contract.
+Owns the spatial lattice and CA state-array shape contract.
 
 Initial implementation: `RasterGrid` only.
 
-Expected metadata:
-
-- height / width;
-- cell size or affine transform when georeferenced;
-- CRS when georeferenced;
-- boundary semantics.
+`RasterGrid` currently stores state and optional cell size. It does not yet own CRS/affine metadata. Geospatial ownership is deliberately postponed until the Rasterio adapter workflow demonstrates whether shared domain metadata or optional grid metadata is cleaner.
 
 `Grid` does not read files and does not compute fire behavior.
 
@@ -110,10 +107,9 @@ Owns cell interaction geometry.
 Initial types:
 
 - Moore;
-- Von Neumann;
-- radius-based neighborhood.
+- Von Neumann.
 
-Research extensions may include directional, weighted, adaptive, anisotropic, or multi-scale neighborhoods. These must be addable without changing `Simulation`.
+Research extensions may include radius, directional, weighted, adaptive, anisotropic, or multi-scale neighborhoods. These must be addable without changing `Simulation`.
 
 A neighborhood should expose reusable offsets or equivalent index structures rather than instantiate Python `Cell` objects for every location.
 
@@ -146,16 +142,16 @@ The behavior model input type is intentionally generic. Rothermel- and FBP-style
 
 Initial scientific targets:
 
-1. Rothermel-style surface fire behavior;
-2. FBP-style behavior for Cell2Fire-related experiments.
+1. Albini-adjusted Rothermel surface fire behavior as the first reference implementation;
+2. FBP-style behavior for later Cell2Fire-related experiments.
 
-Implementations must be independently testable against reference calculations. Detailed unit, direction, and adapter rules are maintained in [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md).
+Implementations must be independently testable against reference calculations. Detailed unit, direction, and adapter rules are maintained in [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md), and Rothermel-specific provenance/validation decisions in [`ROTHERMEL_REFERENCE.md`](ROTHERMEL_REFERENCE.md).
 
 ### 5.6 `data.py`
 
 Owns in-memory environmental layers and time-varying data access.
 
-The initial implemented contract is deliberately small:
+The implemented contract is deliberately small:
 
 ```text
 SpatialLayer
@@ -177,17 +173,45 @@ The kernel works with arrays, not file paths.
 
 ### 5.7 `gis.py`
 
-Owns geospatial adapters and validation helpers.
+Owns the lightweight geospatial raster contract and later file-format adapters.
 
-Initial responsibilities:
+The currently implemented core is Rasterio-independent:
 
-- read/write raster data;
-- preserve CRS and affine transform;
-- validate alignment;
-- fail explicitly on incompatible grids;
-- no silent reprojection or resampling in the core workflow.
+```text
+RasterMetadata
+RasterAlignmentError
+validate_raster_alignment()
+validate_named_raster_alignment()
+```
 
-The first release may keep Rasterio as an optional dependency so the CA core remains lightweight.
+`RasterMetadata` contains:
+
+```text
+shape       (height, width)
+crs         canonical string supplied by an adapter
+transform   six affine coefficients
+nodata      optional marker
+```
+
+For the raster CA line, geometric alignment currently requires compatible:
+
+- shape;
+- canonical CRS;
+- complete affine transform within an explicit numerical tolerance.
+
+NoData equality is optional because NoData representation and NoData simulation semantics are separate concerns.
+
+The core GIS contract never silently:
+
+- reprojects;
+- resamples;
+- crops;
+- shifts an origin;
+- changes CRS.
+
+Those operations belong to explicit preprocessing. Resolution alone is insufficient to establish alignment because two equal-resolution rasters may still have different origins or rotations.
+
+Rasterio remains an optional dependency for the future adapter that converts real datasets to arrays plus `RasterMetadata`. Detailed rules are in [`GIS_DATA_CONTRACT.md`](GIS_DATA_CONTRACT.md).
 
 ### 5.8 `simulation.py`
 
@@ -239,19 +263,27 @@ This choice supports readable NumPy code now and possible Numba acceleration lat
 
 ## 7. GIS data contract
 
-Before simulation, raster inputs must be checked for compatible:
+The implemented geometric precondition is:
 
-- CRS;
-- shape;
-- resolution;
-- affine transform;
-- extent;
-- NoData policy;
-- units where scientifically important.
+```text
+same spatial shape
++
+same canonical CRS
++
+same affine transform within declared tolerance
+```
 
-Incompatibility should raise an explicit project exception rather than being silently corrected.
+The transform check implicitly protects origin, resolution, pixel-axis orientation, rotation/shear, and extent implied by shape + transform. Equal shape/resolution alone does not prove cell-to-cell correspondence.
 
-Reprojection/alignment utilities may exist, but they must be called intentionally by preprocessing code.
+`validate_raster_alignment()` fails closed with `RasterAlignmentError`; it never attempts to repair the data. `validate_named_raster_alignment()` validates many named inputs against one reference grid and includes the offending layer name in errors.
+
+The default affine coefficient tolerance is an absolute `1e-9` with zero relative tolerance. It exists only for floating-point representation noise and must not be enlarged to accept a real grid shift.
+
+NoData remains a separate semantic contract. The project has not yet decided that every missing fuel/weather cell is automatically `UNBURNABLE`.
+
+A later Rasterio/PROJ adapter may canonicalize equivalent CRS definitions before creating `RasterMetadata`, but the numerical core will not implement a partial CRS parser.
+
+See [`GIS_DATA_CONTRACT.md`](GIS_DATA_CONTRACT.md).
 
 ## 8. Randomness and reproducibility
 
@@ -271,7 +303,7 @@ Monte Carlo execution will later derive independent streams explicitly rather th
 
 Configuration is an orchestration concern, not the internal model representation.
 
-A YAML configuration may select:
+A YAML configuration may eventually select:
 
 ```yaml
 simulation:
@@ -310,13 +342,13 @@ Requirements:
 - keep a readable reference path;
 - benchmark separately from correctness tests;
 - optimization must not change scientific semantics silently;
-- backend equivalence tests are required before an optimized path becomes default.
+- optimized/reference equivalence tests are required before an optimized path becomes default.
 
 PyTorch/JAX/differentiable CA are explicitly outside the current scope.
 
-## 11. Testing architecture
+## 11. Testing and validation architecture
 
-Four mandatory levels:
+Four software/scientific levels remain mandatory:
 
 ```text
 unit        — isolated contracts and invariants
@@ -325,14 +357,23 @@ regression  — stable reference outputs with fixed seed/config
 validation  — comparison with scientific/reference calculations
 ```
 
-Performance benchmarks live under `benchmarks/`, not `tests/`.
+Scientific external values additionally receive evidence grades documented in [`VALIDATION.md`](VALIDATION.md):
+
+```text
+Grade A  primary/authoritative worked value
+Grade B  official operational software regression
+Grade C  independent implementation comparison
+Grade D  internal synthetic/analytical fixture
+```
+
+External snapshots are pinned with source revision/provenance and protected from accidental edits. Performance benchmarks live under `benchmarks/`, not correctness tests.
 
 ## 12. Reference projects and what is borrowed
 
 The project should learn selectively rather than copy architectures wholesale:
 
 - **Cell2Fire** — cell-based wildfire propagation, distance/ROS concepts, landscape simulation and Monte Carlo;
-- **SimFire** — Python simulation API organization and mitigation concepts;
+- **SimFire** — Python simulation API organization and independent behavior comparison;
 - **GridFire** — raster modeling, Monte Carlo organization, richer wildfire system concerns;
 - **Pyretechnics** — modular fire-behavior equations and static/dynamic environmental data organization; Level Set propagation is not adopted;
 - **ELMFIRE / ForeFire** — comparison baselines for non-CA propagation, not implementation targets;
@@ -361,7 +402,7 @@ Examples:
 - new neighborhood → `neighborhood.py` + tests;
 - new CA rule → `rules.py` + tests;
 - new fire behavior model → `behavior/` + validation;
-- new raster file format → GIS/data adapter code;
+- new raster file format → `gis.py` adapter + GIS tests;
 - new metric → `metrics.py`.
 
 If a new CA rule requires edits throughout GIS, simulation, configuration, and grid code, the abstraction boundaries should be reviewed before implementation.
@@ -398,4 +439,12 @@ Rothermel, FBP, and future behavior models return the same `FireBehaviorResult`,
 
 ### D008 — Minimal array-first environmental data contract
 
-The initial data layer uses `SpatialLayer` and `EnvironmentalData` with `(Y, X)` / `(T, Y, X)` arrays and explicit alignment checks. Physical time coordinates, xarray/Zarr abstractions, and GIS I/O are deferred until a concrete requirement justifies them.
+The initial data layer uses `SpatialLayer` and `EnvironmentalData` with `(Y, X)` / `(T, Y, X)` arrays and explicit numerical alignment checks. Physical time coordinates and xarray/Zarr abstractions are deferred until a concrete requirement justifies them.
+
+### D009 — GIS alignment precedes file-format adapters
+
+The core GIS contract is a lightweight `RasterMetadata` object independent of Rasterio. Raster layers must agree in shape, canonical CRS, and full affine transform before they enter simulation. GIS preprocessing may transform data; CA simulation may not silently transform its input grid. Rasterio remains an optional adapter dependency.
+
+### D010 — External scientific fixtures require provenance grades
+
+Externally sourced numerical values are not anonymous regression constants. They record evidence grade, source/document or repository, revision/version where applicable, units, and scope. Grade A primary worked values are preferred for interpretation; Grade B official software regression and Grade C independent implementations are used according to documented scope.
