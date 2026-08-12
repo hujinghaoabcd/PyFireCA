@@ -8,9 +8,24 @@ spread rates from a head-fire rate.
 
 from __future__ import annotations
 
-from math import hypot, inf, isfinite
+from math import atan2, degrees, hypot, inf, isfinite
 
 from pyfireca.neighborhood import Offset
+
+
+def _require_offset(offset: Offset) -> tuple[int, int]:
+    if (
+        not isinstance(offset, tuple)
+        or len(offset) != 2
+        or isinstance(offset[0], bool)
+        or isinstance(offset[1], bool)
+        or not isinstance(offset[0], int)
+        or not isinstance(offset[1], int)
+    ):
+        raise TypeError("offset must be a two-integer (drow, dcol) tuple")
+    if offset == (0, 0):
+        raise ValueError("offset (0, 0) is the center cell, not a neighbor")
+    return offset
 
 
 def _require_finite_nonnegative(name: str, value: float) -> None:
@@ -36,22 +51,29 @@ def square_grid_neighbor_distance_m(offset: Offset, cell_size_m: float) -> float
     will require an affine-aware distance adapter instead of this helper.
     """
 
-    if (
-        not isinstance(offset, tuple)
-        or len(offset) != 2
-        or isinstance(offset[0], bool)
-        or isinstance(offset[1], bool)
-        or not isinstance(offset[0], int)
-        or not isinstance(offset[1], int)
-    ):
-        raise TypeError("offset must be a two-integer (drow, dcol) tuple")
-    if offset == (0, 0):
-        raise ValueError("offset (0, 0) is the center cell, not a neighbor")
+    drow, dcol = _require_offset(offset)
     if not isfinite(cell_size_m) or cell_size_m <= 0.0:
         raise ValueError("cell_size_m must be finite and positive")
-
-    drow, dcol = offset
     return hypot(drow, dcol) * cell_size_m
+
+
+def north_up_square_grid_offset_bearing_deg(offset: Offset) -> float:
+    """Return geographic bearing for an offset in a north-up raster array.
+
+    This helper is intentionally explicit about raster orientation:
+
+    - increasing row means south;
+    - increasing column means east;
+    - bearing is clockwise from geographic north.
+
+    Therefore ``(-1, 0)=0°``, ``(0, 1)=90°``, ``(1, 0)=180°`` and
+    ``(0, -1)=270°``. Rotated/sheared rasters require an affine-aware adapter.
+    """
+
+    drow, dcol = _require_offset(offset)
+    north = -float(drow)
+    east = float(dcol)
+    return degrees(atan2(east, north)) % 360.0
 
 
 def spread_travel_time_s(distance_m: float, directional_spread_rate_m_s: float) -> float:
