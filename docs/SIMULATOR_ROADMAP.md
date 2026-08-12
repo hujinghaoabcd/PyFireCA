@@ -1,16 +1,18 @@
 # Simple Simulator Completion Roadmap
 
-> Priority: **complete the baseline simulator before implementing PyFireCA-specific CA innovations**.
+> Priority: **complete and freeze the baseline simulator before implementing PyFireCA-specific CA innovations**.
+>
+> Updated: 2026-08-13
 
 ## Goal
 
-Deliver a small but complete, modern, reproducible wildfire simulator built on the already validated PyFireCA foundations.
+Deliver a small but complete, modern, reproducible wildfire simulator built on the validated PyFireCA foundations.
 
-The target is not yet a full operational wildfire system. The first complete simulator should be deterministic, understandable, GIS-ready, and scientifically traceable.
+The target is not yet a full operational wildfire system. The first complete simulator is deliberately deterministic, static-weather, GIS-ready, scientifically traceable, and easy to audit.
 
 ## Completion definition
 
-The baseline simulator is considered complete when a user can run this workflow without writing internal framework code:
+The baseline is complete when a user can run this workflow without writing internal framework code:
 
 ```text
 configuration + raster inputs + ignition
@@ -30,33 +32,41 @@ arrival/state/fire-footprint outputs
 run metadata + reproducible result directory
 ```
 
+That end-to-end workflow is now implemented. Remaining work is release polish and freeze/readiness auditing.
+
 ## Phase S1 — stabilize current static core
 
-- finish any remaining Ruff/CI formatting debt;
-- preserve the current synchronous CA reference and static physical-arrival solver;
-- preserve strict north-up square-cell semantics for the first complete release;
-- do not add new custom neighborhood or edge-coupling methods to the default simulator.
+**Status: complete.**
+
+- [x] preserve synchronous CA architecture reference;
+- [x] preserve static physical-arrival solver;
+- [x] restrict physical baseline to immediate-neighbor propagation;
+- [x] preserve north-up square-cell semantics;
+- [x] keep experimental neighborhoods/interface coupling out of the default simulator;
+- [x] maintain Ruff/pytest/CI quality gates.
 
 ## Phase S2 — fuel catalogue for normal use
 
-Current audited subset:
+**Status: complete for the first baseline.**
+
+Current audited public catalogue:
 
 ```text
-FM1
-FM2
-GR1
+Anderson FM1–FM13
+Scott–Burgan GR1 (101)
 ```
 
-Next target:
+- [x] audit Anderson 13 directly from pinned Behave source;
+- [x] preserve pinned source provenance;
+- [x] add native-record regression tests;
+- [x] verify all Anderson models convert and compute;
+- [x] preserve existing FM1/FM2/GR1 Grade B regressions.
 
-- audit Anderson 13 standard models;
-- then audit Scott–Burgan 40 models if practical within the simple-simulator scope;
-- preserve pinned source provenance for every record;
-- add catalogue regression tests.
-
-The simulator must never silently use unaudited guessed fuel parameters.
+Remaining Scott–Burgan models are optional post-baseline catalogue expansion and do not block the first simulator freeze.
 
 ## Phase S3 — complete static landscape input
+
+**Status: complete.**
 
 Required raster layers:
 
@@ -73,78 +83,106 @@ slope
 aspect
 ```
 
-Requirements:
+Implemented:
 
-- GeoTIFF read support;
-- strict alignment checks;
-- domain mask / NoData semantics;
-- explicit units;
-- clear error messages;
-- one documented preprocessing contract.
-
-Keep the first complete simulator limited to north-up square metric grids rather than prematurely generalizing affine geometry.
+- [x] GeoTIFF read support;
+- [x] strict shape/CRS/full-affine alignment checks;
+- [x] domain mask / NoData semantics;
+- [x] explicit fixed units;
+- [x] fail-fast errors;
+- [x] north-up square metric-grid baseline;
+- [x] documented preprocessing/input contract.
 
 ## Phase S4 — ignition and simulation entry point
 
-Add a user-facing simulation request/configuration object or equivalent small API that accepts:
+**Status: complete.**
+
+Public baseline API:
 
 ```text
-landscape
-ignition location/mask/time
-neighborhood
-wind-limit option
-output settings
+IgnitionEvent
+build_ignition_times
+StaticWildfireSimulationRequest
+StaticWildfireSimulationResult
+run_static_wildfire_simulation
 ```
 
-The default physical simulator should use the validated baseline, not experimental CA variants.
+Supported:
 
-Support at least:
+- [x] one ignition cell;
+- [x] multiple simultaneous ignition cells;
+- [x] delayed ignition times;
+- [x] duplicate-cell events with earliest-time resolution;
+- [x] ignition/domain validation;
+- [x] stable result object with state snapshots and summary metrics.
 
-- one ignition cell;
-- multiple simultaneous ignition cells;
-- optional specified ignition times.
+The default simulator uses the validated Moore-8 physical-arrival baseline and does not expose research variants.
 
 ## Phase S5 — outputs
 
-Produce a stable result object and GIS outputs:
+**Status: complete for the baseline.**
+
+Spatial outputs:
 
 ```text
-arrival_time.tif
-state.tif
-burned_mask.tif
-perimeter.gpkg or GeoJSON
+outputs/
+├── arrival_time.tif
+├── state.tif
+├── burned_mask.tif
+└── perimeter.geojson
+```
+
+Run-level outputs:
+
+```text
+config.resolved.yml
 metadata.json
-resolved_config.yml/json
-metrics.json (basic run statistics)
+environment.json
+metrics.json
+log.txt
 ```
 
-Minimum summary metrics:
+Implemented semantics:
 
-```text
-burned area
-first/last arrival time
-number of burned cells
-runtime
-```
+- [x] `arrival_time.tif` as float64 seconds with `-1` file NoData;
+- [x] canonical terminal `state.tif`;
+- [x] `uint8` 0/1 burned mask;
+- [x] final burned footprint polygonization;
+- [x] source CRS → WGS84 before GeoJSON serialization;
+- [x] burned area / cell count / first-last arrival / runtime metrics;
+- [x] Rasterio round-trip tests.
 
-The perimeter/vector output may be derived from the raster footprint; no advanced fire-front solver is required.
+Run statistics have one canonical location at the run root; they are not duplicated in `outputs/`.
 
 ## Phase S6 — configuration and CLI
 
-Provide one straightforward command, for example:
+**Status: complete.**
 
-```text
-pyfireca run config.yml
+CLI:
+
+```bash
 pyfireca validate config.yml
+pyfireca run config.yml
 ```
 
-Configuration should expose only meaningful baseline options.
+Configuration version 1:
 
-Do not expose experimental research switches in the default CLI.
+- [x] strict YAML schema implemented without a heavy config framework;
+- [x] PyYAML is the only added runtime configuration dependency;
+- [x] relative paths resolve against the YAML directory;
+- [x] unknown/missing keys fail explicitly;
+- [x] research-only switches remain absent;
+- [x] console script registered in package metadata;
+- [x] CLI unit tests;
+- [x] real GeoTIFF CLI integration test.
+
+CLI uses standard-library `argparse` and contains no scientific implementation logic.
 
 ## Phase S7 — reproducible run directory
 
-Each run should create a self-contained result directory such as:
+**Status: complete.**
+
+Current contract:
 
 ```text
 runs/<run-id>/
@@ -157,55 +195,79 @@ runs/<run-id>/
     ├── arrival_time.tif
     ├── state.tif
     ├── burned_mask.tif
-    └── perimeter.gpkg
+    └── perimeter.geojson
 ```
 
-Metadata should include at least:
+Metadata now includes:
 
-```text
-PyFireCA version
-git commit when available
-Python version
-input paths/hashes where practical
-fuel catalogue provenance
-configuration
-runtime
-```
+- [x] PyFireCA/Python/platform information;
+- [x] Git commit when supplied by execution environment;
+- [x] resolved configuration;
+- [x] raster geometry;
+- [x] ignition events;
+- [x] SHA-256 for every input raster;
+- [x] encountered fuel models and pinned catalogue provenance;
+- [x] runtime metrics.
+
+The workflow validates inputs before creating a new run directory and refuses to silently overwrite a non-empty result directory.
 
 ## Phase S8 — examples and documentation
 
-Provide at least three end-to-end examples:
+**Status: substantially complete; final example polish remains.**
 
-1. homogeneous synthetic fire;
-2. heterogeneous two/three-fuel raster landscape;
-3. file-based GeoTIFF landscape run.
-
-Documentation should include:
+Available:
 
 ```text
-Getting Started
-Input Data Contract
-Configuration
-Running a Simulation
-Outputs
-Scientific Assumptions
-Validation
-Limitations
+examples/minimal.py
+examples/static_raster_rothermel.py
+examples/static_run.yml
+README.md
+README.zh-CN.md
+docs/RUNNING_SIMULATOR.md
+docs/STATIC_RASTER_WORKFLOW.md
+docs/ROTHERMEL_REFERENCE.md
+docs/VALIDATION.md
 ```
 
-README remains the landing page; detailed simulator usage belongs in docs.
+Completed:
+
+- [x] minimal synchronous CA architecture example;
+- [x] in-memory static Rothermel raster example;
+- [x] file-based version-1 YAML example;
+- [x] detailed input contract;
+- [x] CLI/config/output documentation;
+- [x] scientific assumptions and limitations;
+- [x] README links to detailed docs instead of becoming the manual.
+
+Remaining desirable polish before freeze:
+
+- [ ] add one explicitly heterogeneous two/three-fuel end-to-end example, or document why the existing heterogeneous integration tests are sufficient for the first tag;
+- [ ] verify every documented shell command against a clean package install.
 
 ## Phase S9 — validation before baseline freeze
 
-Before calling the simple simulator complete:
+**Status: active final gate.**
 
-- all existing Rothermel/Behave Grade B tests remain green;
-- end-to-end synthetic arrival results are deterministic;
-- file-based GIS example is covered by a smoke/integration test;
-- output rasters preserve geometry and dtype conventions;
-- CLI/config validation is tested;
-- Python 3.11/3.12/3.13 + GIS CI are green;
-- one tagged baseline release can be reproduced from documentation.
+Already satisfied:
+
+- [x] existing Rothermel/Behave Grade B regressions remain protected;
+- [x] deterministic synthetic arrival tests;
+- [x] file-based GIS integration test;
+- [x] output geometry/dtype round-trip tests;
+- [x] CLI/config validation tests;
+- [x] real YAML → GeoTIFF → simulator → output integration test;
+- [x] Python 3.11/3.12/3.13 functional coverage;
+- [x] separate GIS CI job.
+
+Remaining release-readiness work:
+
+- [ ] keep latest final commit all green, including Ruff format;
+- [ ] build wheel and sdist in CI;
+- [ ] install the built wheel in a clean environment and exercise `pyfireca --help`;
+- [ ] verify GIS extra from a clean install path;
+- [ ] add a release-readiness checklist;
+- [ ] perform final docs/package audit;
+- [ ] tag/freeze the first baseline only after the checklist is satisfied.
 
 ## Explicitly deferred until after baseline completion
 
@@ -215,9 +277,11 @@ These are not required for the first simple simulator:
 new PyFireCA-specific neighborhood method
 adaptive/directional CA innovation
 new interface-coupling research method
+full Scott–Burgan 40 catalogue
 WRF coupling
 time-varying weather scheduler
 NetCDF/xarray pipeline
+rotated/non-square affine-aware geometry
 crown fire
 spotting
 suppression
@@ -228,12 +292,10 @@ Numba optimization
 GPU / Torch / JAX
 ```
 
-Some of these may later become ordinary simulator features, but they must not delay the first clean static baseline.
-
 ## Development rule
 
-Until this roadmap is complete:
+Until S9 is complete:
 
-> Prefer completing missing user-facing simulator workflow over creating new scientific variants.
+> Prefer release-readiness and reproducibility work over creating new scientific variants.
 
 Any promising research idea should be written to `docs/FUTURE_RESEARCH.md` and deferred rather than implemented immediately.
