@@ -175,7 +175,7 @@ Raster row orientation must never silently redefine geographic direction convent
 
 ## 8. R1 — implemented base fuel quantities
 
-R1 is now partially implemented with small pure functions and hand-computable tests.
+R1 is implemented with small pure functions and hand-computable tests.
 
 ### Surface-area weighting
 
@@ -214,7 +214,7 @@ sum(load / particle_density) / fuel-bed depth
 
 ### R1 validation status
 
-Tests currently cover:
+Tests cover:
 
 - exact dead/live surface-area weights for a hand-computable synthetic fuel bed;
 - characteristic SAV;
@@ -225,35 +225,88 @@ Tests currently cover:
 - invalid negative SAV rejection;
 - exact/round-trip unit conversions.
 
-The R1 tests pass in the Python 3.11/3.12/3.13 matrix. Quality failures encountered while adding them have been lint/format-only and are corrected as part of the same development pass.
+The R1 code baseline is fully green in GitHub Actions across Ruff lint/format, the quality pytest run, and Python 3.11/3.12/3.13.
 
-## 9. R2 — no-wind / no-slope surface spread
+## 9. R2 reference variant — Albini-adjusted Rothermel
 
-R2 is deliberately **not implemented yet**.
+R2 is deliberately **not implemented yet**, but the reference variant is now resolved.
 
-Before coding reaction intensity and base ROS, PyFireCA must reconcile which published equation variants constitute its reference behavior. The original 1972 model and later Albini/Andrews operational formulations are not identical in every intermediate expression.
+Albini 1976 explicitly lists significant modifications to the Rothermel 1972 computation path used by the FIREMODS-based nomographs. PyFireCA will treat these as part of its named **Albini-adjusted Rothermel surface-fire reference** rather than silently mixing 1972 and later equations.
 
-At minimum, R2 must explicitly resolve and document:
+The documented modifications are:
 
-- the Albini replacement for the reaction-velocity exponent/correlation used in later implementations;
-- the exact net-fuel-loading convention used by the selected reference formulation;
-- live moisture-of-extinction treatment;
-- dynamic herbaceous curing boundaries;
-- whether a given correction belongs to the core Rothermel reference or to a named later extension.
+### A1 — combustible fuel loading
 
-Do **not** mix formulas from different vintages simply because they appear in existing software.
+Albini treats reported oven-dry loading as including the noncombustible total mineral fraction and computes combustible loading as:
 
-The next implementation should first create authoritative numerical fixtures for the selected formulation, then add formula-level functions for:
+```text
+W0 × (1 - S_T)
+```
 
+rather than the original Rothermel 1972 form:
+
+```text
+W0 / (1 + S_T)
+```
+
+This choice must be applied consistently wherever net/combustible loading enters reaction-intensity calculations.
+
+### A2 — reaction-velocity exponent
+
+Albini replaces the original Rothermel expression for exponent `A` with:
+
+```text
+A = 133 × sigma^(-0.7913)
+```
+
+where `sigma` uses the published inverse-foot convention for that correlation. Albini states that the replacement prevents divergence of the original expression at low characteristic SAV and that the numerical differences are small but noticeable.
+
+### A3 — live moisture of extinction
+
+Albini replaces the earlier live moisture-of-extinction calculation with a fine-fuel weighting method using exponential SAV weighting. The revised result is bounded below by dead-fuel moisture of extinction rather than by a fixed `0.3`.
+
+This is a separate scientific subcomponent and should be implemented/tested independently rather than buried inside one large ROS function.
+
+### A4 — combining dead and live reaction intensities
+
+Albini's computer-based formulation adds dead and live reaction intensities directly. It does not apply the earlier category surface-area weighted average at the final intensity-combination step.
+
+This distinction is especially important because PyFireCA still uses surface-area weights for heterogeneous fuel properties where those weights are scientifically required; the weights should not be reused automatically at every downstream stage.
+
+### Andrews 2018 role
+
+Andrews 2018 explicitly describes the widely used Rothermel surface-fire model as the Rothermel model **with adjustments by Albini in 1976** and brings equations from the associated developments into a consolidated reference. Therefore Andrews is used as the modern consistency check for the Albini-adjusted implementation path.
+
+### R2 implementation gate
+
+The reference variant is now named, but code still waits for authoritative numerical fixtures. The next work is:
+
+```text
+freeze equation-by-equation provenance
+        ↓
+prepare authoritative numeric fixtures
+        ↓
+implement/test each scalar sub-equation
+        ↓
+assemble no-wind/no-slope ROS
+```
+
+Planned formula-level functions include:
+
+- combustible/net fuel loading;
 - mineral damping;
 - moisture damping;
-- net fuel loading;
-- reaction velocity/intensity;
+- revised live moisture of extinction;
+- Albini-adjusted reaction-velocity exponent;
+- optimum/actual reaction velocity;
+- dead and live reaction intensity;
 - propagating flux ratio;
 - effective heating number;
 - heat of preignition;
 - heat source/sink;
 - no-wind/no-slope ROS.
+
+Do **not** mix original and revised equations without naming the variant and documenting why.
 
 ## 10. Later implementation stages
 
@@ -311,7 +364,7 @@ Not yet implemented:
 - wind/slope equation chain;
 - standard fuel catalogue constants;
 - dynamic herbaceous curing;
-- live moisture-of-extinction calculation;
+- revised live moisture-of-extinction calculation;
 - canopy wind-adjustment factors;
 - crown fire;
 - spotting;
