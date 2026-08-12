@@ -17,7 +17,8 @@ The following files are living development artifacts:
 - `docs/DEVELOPMENT.md` — development workflow and roadmap;
 - `docs/STATUS.md` — current implementation status;
 - `docs/HANDOFF.md` — detailed continuation guide;
-- `docs/VALIDATION.md` — scientific validation plan.
+- `docs/VALIDATION.md` — scientific validation plan;
+- `docs/BEHAVIOR_DATA_CONTRACT.md` — units, behavior/data boundaries, and Milestone C conventions.
 
 Rules:
 
@@ -109,18 +110,22 @@ Exit criterion: **met for the architectural reference core.** A small raster CA 
 
 **Current implementation target.** Establish common data and behavior contracts before adding complete spread equations.
 
-- [ ] define SI-unit policy and document any source-model conversion boundaries;
-- [ ] common `FireBehaviorResult` type;
-- [ ] behavior base protocol;
-- [ ] minimal environmental input contract;
-- [ ] static landscape layers;
-- [ ] dynamic environmental layers;
+- [x] define SI-unit policy and document source-model conversion boundaries;
+- [x] common `FireBehaviorResult` type;
+- [x] generic `FireBehaviorModel` protocol;
+- [x] minimal environmental input contract;
+- [x] static `(Y, X)` spatial layers;
+- [x] dynamic `(T, Y, X)` environmental layers;
+- [x] common spatial/time alignment checks for in-memory layers;
 - [ ] initial fuel representation;
-- [ ] reference tests for behavior contracts;
-- [ ] GIS alignment validation;
-- [ ] optional Rasterio I/O.
+- [x] unit tests for behavior/data contracts;
+- [ ] GIS CRS/transform alignment validation;
+- [ ] optional Rasterio I/O;
+- [ ] model-specific behavior input contract for the first validated fire-behavior implementation.
 
-The common behavior interface must be designed before implementing Rothermel or FBP so both can feed CA transition rules without model-name branches in `Simulation`.
+The common behavior interface is now established before Rothermel/FBP implementation. `Simulation` therefore does not need model-name branches, and behavior models are free to use different strongly typed input dataclasses while returning the same CA-facing result.
+
+See [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md) for the exact current contract.
 
 ### Milestone D — first behavior-informed wildfire CA rule
 
