@@ -16,15 +16,11 @@ def test_cardinal_neighbor_distance_equals_one_cell_size() -> None:
 
 def test_diagonal_neighbor_distance_uses_euclidean_geometry() -> None:
     for offset in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
-        assert square_grid_neighbor_distance_m(offset, 30.0) == pytest.approx(
-            30.0 * sqrt(2.0)
-        )
+        assert square_grid_neighbor_distance_m(offset, 30.0) == pytest.approx(30.0 * sqrt(2.0))
 
 
 def test_larger_neighborhood_offset_preserves_physical_distance() -> None:
-    assert square_grid_neighbor_distance_m((2, -1), 20.0) == pytest.approx(
-        20.0 * sqrt(5.0)
-    )
+    assert square_grid_neighbor_distance_m((2, -1), 20.0) == pytest.approx(20.0 * sqrt(5.0))
 
 
 def test_travel_time_is_distance_divided_by_directional_ros() -> None:
