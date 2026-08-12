@@ -1,113 +1,172 @@
 # PyFireCA
 
-**面向林火蔓延模拟的模块化、可扩展 Python 元胞自动机框架。**
+**面向林火蔓延模拟的模块化、经过验证、GIS 就绪的 Python 元胞自动机框架。**
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](#安装)
 [![CI](https://github.com/hujinghaoabcd/PyFireCA/actions/workflows/ci.yml/badge.svg)](https://github.com/hujinghaoabcd/PyFireCA/actions/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-early%20development-orange)](#项目状态)
+[![Status](https://img.shields.io/badge/status-alpha-orange)](#项目状态)
 
-[English](README.md) · [总体设计](docs/DESIGN.md) · [开发说明](docs/DEVELOPMENT.md) · [验证方案](docs/VALIDATION.md) · [交接文档](docs/HANDOFF.md)
+[English](README.md) · [运行模拟器](docs/RUNNING_SIMULATOR.md) · [总体设计](docs/DESIGN.md) · [验证方案](docs/VALIDATION.md) · [当前状态](docs/STATUS.md) · [交接文档](docs/HANDOFF.md)
 
 ## 为什么做 PyFireCA？
 
-许多林火 CA 实现会把火行为公式、邻域遍历、栅格状态、GIS 输入输出、模拟控制和实验代码混在一起，导致一旦修改 CA 的状态、邻域或转移规则，就需要连带修改大量无关代码。
+许多林火 CA 实现会把火行为公式、栅格几何、传播逻辑、GIS 输入输出和实验代码耦合在一起。PyFireCA 将这些职责拆开，使火行为模型、传播语义、空间数据契约和用户工作流可以分别验证、维护和扩展。
 
-PyFireCA 从一开始就把研究中最可能持续变化的 **状态、邻域、转移规则和时间推进机制** 与火行为计算、GIS 数据处理分离。早期版本优先保证 NumPy 参考实现清晰、结果可复现、科学验证充分、接口可扩展，而不是过早追求 GPU 或复杂抽象。
+当前优先级非常明确：**先把一个简单、完整、现代化、可复现的林火模拟器基线做扎实；新的 PyFireCA 自研 CA 方法先记录，不混入默认实现。**
 
-## 设计目标
+## 当前基线能力
 
-- **以 CA 为核心**：明确使用元胞自动机表达林火空间传播。
-- **可扩展**：替换邻域或转移规则时，不重写模拟主循环。
-- **火行为解耦**：Rothermel、FBP 等火行为模型与 CA 传播规则分开。
-- **GIS 原生意识**：CRS、分辨率、Transform、Extent、NoData 等属于正式数据契约。
-- **可复现**：显式随机数生成器、配置、回归测试和验证案例。
-- **现代科研软件工程**：`src/` 布局、类型提示、测试、Ruff、pre-commit、CI、设计文档与交接文档从开发第一天维护。
-
-## 架构
+PyFireCA 已经具备一条端到端静态栅格工作流：
 
 ```text
-GIS / 环境数据
-      ↓
-     Grid
-      ↓
-     State
-      ↓
- Neighborhood
-      ↓
-火行为 → Transition Rule
-      ↓
-  Simulation
-      ↓
-    Metrics
+YAML 配置 + 对齐 GeoTIFF + 点火事件
+                ↓
+             输入验证
+                ↓
+        已审计标准燃料模型
+                ↓
+    Albini-adjusted Rothermel
+                ↓
+ Behave/Catchpole 方向性表面火传播
+                ↓
+       物理最早到达时间传播
+                ↓
+ arrival / state / burned footprint
+                ↓
+   配置、环境、哈希与运行元数据
 ```
 
-详细设计见 [`docs/DESIGN.md`](docs/DESIGN.md)。
+当前已经实现：
+
+- 经固定 Behave 参考验证的 Rothermel 火行为链；
+- 风、坡度、动态草本 curing 和可选 wind-speed limit；
+- Behave/Catchpole 椭圆及 `FromIgnitionPoint` 非主传播方向 ROS；
+- 已审计 Anderson **FM1–FM13** 与 Scott–Burgan **GR1 (101)**；
+- 静态空间异质栅格环境；
+- 单点、多点以及延迟点火；
+- Moore-8 baseline 下的物理最早到达时间传播；
+- arrival/state/burned-mask GeoTIFF；
+- WGS84 burned-footprint GeoJSON；
+- resolved config、输入 SHA-256、燃料 provenance、运行环境、metrics 和 log；
+- Python API 与 `pyfireca validate/run` CLI；
+- Python 3.11–3.13、GIS、回归与 Behave reference CI。
 
 ## 安装
 
-当前处于早期开发阶段，建议源码安装：
+运行文件型 GIS 模拟器：
 
 ```bash
 git clone https://github.com/hujinghaoabcd/PyFireCA.git
 cd PyFireCA
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[gis]"
+```
+
+开发环境：
+
+```bash
+python -m pip install -e ".[dev,gis]"
 ```
 
 ## 快速开始
 
-当前已经具备一个最小可运行的参考 CA：燃烧元胞在下一步变为已燃，并点燃所选邻域内当前仍未燃烧的元胞。这个规则故意不加入 Rothermel/FBP，用来先验证 CA 架构本身。
+以 [`examples/static_run.yml`](examples/static_run.yml) 为配置模板，将路径替换为十个已经对齐的 GeoTIFF，然后先验证：
 
-```python
-import numpy as np
-
-from pyfireca import (
-    FireState,
-    MooreNeighborhood,
-    NeighborIgnitionRule,
-    RasterGrid,
-    Simulation,
-)
-
-state = np.full((7, 7), FireState.UNBURNED, dtype=np.uint8)
-state[3, 3] = FireState.BURNING
-
-grid = RasterGrid(state=state, cell_size=30.0)
-rule = NeighborIgnitionRule(MooreNeighborhood(radius=1))
-sim = Simulation.from_seed(grid=grid, rule=rule, seed=42)
-
-sim.run(steps=3)
-print(sim.grid.state)
+```bash
+pyfireca validate examples/static_run.yml
 ```
 
-完整可运行版本见 [`examples/minimal.py`](examples/minimal.py)。
+通过后运行：
 
-## 第一阶段科学范围
+```bash
+pyfireca run examples/static_run.yml
+```
 
-- 栅格林火 CA；
-- 可替换邻域；
-- 可替换转移规则；
-- 确定性与随机 CA；
-- Rothermel / FBP 风格火行为接口；
-- 静态与动态环境图层；
-- GeoTIFF GIS 工作流；
-- NumPy 参考实现，性能剖析后再局部引入 Numba；
-- Monte Carlo 与科学验证。
+输出目录：
 
-第一阶段明确不做：可微 CA、PyTorch/JAX backend、Level Set、Front Tracking、CFD、城市模拟、Web UI 和分布式服务。
+```text
+runs/static-example/
+├── config.resolved.yml
+├── metadata.json
+├── environment.json
+├── metrics.json
+├── log.txt
+└── outputs/
+    ├── arrival_time.tif
+    ├── state.tif
+    ├── burned_mask.tif
+    └── perimeter.geojson
+```
+
+输入单位、NoData 语义、点火配置和输出说明见 [`docs/RUNNING_SIMULATOR.md`](docs/RUNNING_SIMULATOR.md)。
+
+## 科学架构
+
+```text
+GIS / EnvironmentalData
+          ↓
+      LandscapeInput
+          ↓
+   每个格点 Rothermel inputs
+          ↓
+     FireBehaviorModel
+          ↓
+     方向性表面火 ROS
+          ↓
+ edge travel time = distance / ROS
+          ↓
+     earliest arrival
+          ↓
+   FireState / GIS outputs
+```
+
+项目仍保留原始同步 CA reference path，用于验证 CA 架构和离散规则；它不会被偷偷赋予一个物理 `dt`，也不会替代当前经过验证的物理 arrival baseline。
+
+详细设计见 [`docs/DESIGN.md`](docs/DESIGN.md)。
+
+## 输入数据契约
+
+第一版文件工作流要求所有栅格满足：north-up、方形像元、米制 cell size、完全一致的 shape/CRS/affine alignment。
+
+十个输入层及单位：
+
+```text
+fuel model                   整数代码
+1-h dead moisture            fraction
+10-h dead moisture           fraction
+100-h dead moisture          fraction
+live herbaceous moisture     fraction
+live woody moisture          fraction
+midflame wind speed          m/s
+meteorological wind-from     degrees
+slope                        degrees
+aspect                       degrees
+```
+
+PyFireCA 不会静默把百分比湿度、百分比坡度、10 m 风、弧度或错位栅格自动转换成“看起来能跑”的输入。
 
 ## 验证
 
-科学验证是项目一级要求，不放到“最后再补”。计划包括邻域不变量、确定性回归案例、火行为参考计算、网格/时间步敏感性、方向偏差以及与参考模型的对照。见 [`docs/VALIDATION.md`](docs/VALIDATION.md)。
+科学验证是项目一级能力。当前固定参考包括 USFS Fire Lab Behave 的基础 Rothermel ROS、风坡组合、GR1 动态 curing 以及 off-axis directional spread。外部 reference 保存固定上游 revision 和证据等级。
+
+见 [`docs/VALIDATION.md`](docs/VALIDATION.md) 与 [`docs/ROTHERMEL_REFERENCE.md`](docs/ROTHERMEL_REFERENCE.md)。
+
+## 论文创新线
+
+格网方向偏差、扩展/动态邻域、异质介质 interface coupling 等潜在论文方向已经单独保存到 [`docs/FUTURE_RESEARCH.md`](docs/FUTURE_RESEARCH.md)，**当前只记录，不继续实现**。
+
+当前开发优先级见 [`docs/SIMULATOR_ROADMAP.md`](docs/SIMULATOR_ROADMAP.md)：先完成并冻结简单 simulator baseline，再回来开展自己的 CA 创新。
 
 ## 开发阶段文档
 
-以下文档必须与代码同步维护：
+以下文档持续与代码同步：
 
-- [`docs/DESIGN.md`](docs/DESIGN.md)：架构、职责、扩展边界、设计决策；
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)：开发路线和开发规则；
-- [`docs/STATUS.md`](docs/STATUS.md)：当前状态、已完成与进行中事项；
-- [`docs/HANDOFF.md`](docs/HANDOFF.md)：下一次开发可直接接手的详细交接；
-- [`docs/VALIDATION.md`](docs/VALIDATION.md)：科学与数值验证计划。
+- [`docs/DESIGN.md`](docs/DESIGN.md)：架构与设计决策；
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)：开发路线；
+- [`docs/STATUS.md`](docs/STATUS.md)：当前仓库真实状态；
+- [`docs/HANDOFF.md`](docs/HANDOFF.md)：详细开发交接；
+- [`docs/SESSION_LOG.md`](docs/SESSION_LOG.md)：阶段开发记录；
+- [`docs/VALIDATION.md`](docs/VALIDATION.md)：科学与数值验证；
+- [`docs/FUTURE_RESEARCH.md`](docs/FUTURE_RESEARCH.md)：暂缓实施的论文创新线。
 
 ## 引用
 
@@ -115,4 +174,6 @@ print(sim.grid.state)
 
 ## 项目状态
 
-当前处于 **Early Development**。第一个里程碑为 `v0.1.0`：先建立小而可靠的 CA reference core，再逐步实现完整林火传播模型。
+PyFireCA 当前为 **Alpha research software**。静态 baseline simulator 已能够从 YAML + GeoTIFF 完成端到端模拟；当前剩余工作集中在文档、release-quality 集成检查和少量 baseline polish，然后冻结第一版简单模拟器。
+
+动态天气/WRF、crown fire、spotting、suppression、Monte Carlo、FBP、GPU backend 以及 PyFireCA 自研新 CA 方法都不属于当前 baseline release 的阻塞项。
