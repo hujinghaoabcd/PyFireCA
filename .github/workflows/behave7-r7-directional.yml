@@ -33,6 +33,15 @@ jobs:
 
           path = Path("behave-core/src/testBehave/testBehave.cpp")
           source = path.read_text()
+          include_needle = "#include <iostream>\n"
+          if include_needle not in source:
+              raise SystemExit("Could not locate iostream include")
+          source = source.replace(
+              include_needle,
+              include_needle + "#include <iomanip>\n",
+              1,
+          )
+
           needle = '    std::cout << "Finished testing spread rate in direction of interest\\n\\n";\n'
           lines = [
               '    testName = "PyFireCA pinned FM1 direct-midflame 100 ft/min, zero slope, 90 degrees from head, FromIgnitionPoint";',
