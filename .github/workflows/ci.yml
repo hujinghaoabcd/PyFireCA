@@ -100,3 +100,66 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "pyfireca[gis] @ file://${WHEEL}"
           python -c "import pyfireca, rasterio; print(pyfireca.__version__, rasterio.__version__)"
+
+      - name: Exercise installed GIS wheel end to end
+        run: |
+          . .venv-gis/bin/activate
+          python - <<'PY'
+          from pathlib import Path
+
+          import numpy as np
+
+          from pyfireca.gis import RasterMetadata, write_raster
+
+          root = Path(".package-smoke")
+          data_dir = root / "data"
+          data_dir.mkdir(parents=True)
+          shape = (1, 3)
+          metadata = RasterMetadata(
+              shape=shape,
+              crs="EPSG:32633",
+              transform=(30.0, 0.0, 500000.0, 0.0, -30.0, 4500000.0),
+              nodata=-9999.0,
+          )
+          values = {
+              "fuel_model": np.full(shape, 1, dtype=np.int16),
+              "dead_1h_moisture": np.full(shape, 0.05, dtype=np.float32),
+              "dead_10h_moisture": np.full(shape, 0.05, dtype=np.float32),
+              "dead_100h_moisture": np.full(shape, 0.05, dtype=np.float32),
+              "live_herbaceous_moisture": np.full(shape, 1.0, dtype=np.float32),
+              "live_woody_moisture": np.full(shape, 1.0, dtype=np.float32),
+              "midflame_wind_speed": np.zeros(shape, dtype=np.float32),
+              "wind_from_direction": np.zeros(shape, dtype=np.float32),
+              "slope": np.zeros(shape, dtype=np.float32),
+              "aspect": np.zeros(shape, dtype=np.float32),
+          }
+          for name, array in values.items():
+              write_raster(data_dir / f"{name}.tif", array, metadata)
+
+          input_lines = "\n".join(f"  {name}: data/{name}.tif" for name in values)
+          (root / "run.yml").write_text(
+              "\n".join(
+                  [
+                      "version: 1",
+                      "cell_size_m: 30.0",
+                      "use_wind_speed_limit: false",
+                      "inputs:",
+                      input_lines,
+                      "ignitions:",
+                      "  - row: 0",
+                      "    col: 0",
+                      "output:",
+                      "  directory: runs/smoke",
+                      "",
+                  ]
+              ),
+              encoding="utf-8",
+          )
+          PY
+          pyfireca validate .package-smoke/run.yml
+          pyfireca run .package-smoke/run.yml
+          test -f .package-smoke/runs/smoke/config.resolved.yml
+          test -f .package-smoke/runs/smoke/metadata.json
+          test -f .package-smoke/runs/smoke/metrics.json
+          test -f .package-smoke/runs/smoke/outputs/arrival_time.tif
+          test -f .package-smoke/runs/smoke/outputs/perimeter.geojson
