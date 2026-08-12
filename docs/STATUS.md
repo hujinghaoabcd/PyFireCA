@@ -6,181 +6,186 @@
 
 ## Current position
 
-PyFireCA now has two stable layers:
+PyFireCA now has a tested CA reference core, a common fire-behavior/data boundary, and the first real behavior-family input contract.
 
 ```text
-Milestone B
-CA reference core
-
 RasterGrid + FireState + Neighborhood + TransitionRule
                          ↓
                      Simulation
 
-Milestone C
-Behavior/data boundary
-
 EnvironmentalData
       ↓
-model-specific behavior inputs
+RothermelInputs
       ↓
-FireBehaviorModel
+future Rothermel reference implementation
       ↓
 FireBehaviorResult
       ↓
 future behavior-informed CA rule
 ```
 
-The project still intentionally avoids complete Rothermel/FBP equations at this point. The current goal is to make the contracts around those models explicit before scientific formulas are added.
+The Rothermel scientific equation chain has **not** been implemented yet. This is intentional: the input/fuel/unit conventions are being stabilized and tested first.
 
 ## Completed
 
 ### Repository / engineering
 
 - modern `src/` package layout;
-- `pyproject.toml` with Python 3.11+, Hatchling, NumPy, optional GIS/dev dependencies;
-- Ruff lint/format, pre-commit, pytest, coverage;
-- GitHub Actions CI for Python 3.11, 3.12, and 3.13;
-- English and Chinese README with runnable reference CA example;
+- Python 3.11+ / Hatchling / NumPy core;
+- Ruff lint and format, pre-commit, pytest, coverage;
+- GitHub Actions matrix for Python 3.11, 3.12, and 3.13;
+- English/Chinese README with runnable CA example;
 - `CITATION.cff`, `CHANGELOG.md`, `CONTRIBUTING.md`;
-- living design/development/status/handoff/validation documentation.
+- living design, development, validation, status, and handoff documentation.
 
 ### CA reference core
 
-- `FireState` enum and array validation;
-- `RasterGrid` state/shape contract;
-- `Neighborhood` protocol;
+- `FireState` and state-array validation;
+- `RasterGrid`;
+- replaceable `Neighborhood` protocol;
 - Moore and Von Neumann neighborhoods;
-- clipped-boundary neighbor lookup;
-- synchronous `TransitionRule` contract;
-- explicit RNG through `numpy.random.Generator`;
+- clipped boundary semantics;
+- synchronous `TransitionRule` protocol;
+- explicit `numpy.random.Generator`;
 - `Simulation.step()` / `run()`;
-- deterministic `NeighborIgnitionRule` reference baseline;
-- explicit test that synchronous updates do not cascade within a single step.
+- deterministic `NeighborIgnitionRule` baseline;
+- no-cascade synchronous-update regression test.
 
-### Fire-behavior boundary
-
-Implemented in `src/pyfireca/behavior/`:
+### Common fire-behavior/data boundary
 
 - generic `FireBehaviorModel[InputT]` protocol;
 - immutable `FireBehaviorResult`;
-- required common `spread_rate_m_s`;
-- optional `spread_direction_deg`;
-- optional `fireline_intensity_w_m`;
-- optional `flame_length_m`;
-- optional model-specific scalar diagnostics;
-- finite/non-negative validation where scientifically appropriate;
-- direction convention fixed to degrees clockwise from geographic north in `[0, 360)`.
+- common SI-derived output fields for spread rate, direction, fireline intensity, and flame length;
+- direction convention: clockwise from geographic north;
+- `SpatialLayer` for `(Y, X)` and `(T, Y, X)` data;
+- `EnvironmentalData` with spatial/time-length alignment validation;
+- integer-index dynamic snapshots;
+- explicit units/NoData metadata without hidden conversion or imputation.
 
-Important design decision: Rothermel and FBP are **not** forced to share one oversized input dataclass. Each model may define its own strongly typed inputs while returning the same CA-facing `FireBehaviorResult`.
+### Rothermel input/fuel contract
 
-### Environmental data boundary
+Implemented in `src/pyfireca/behavior/rothermel.py`:
 
-Implemented in `src/pyfireca/data.py`:
+- fixed six-class fuel ordering:
+  - `DEAD_1H`;
+  - `DEAD_10H`;
+  - `DEAD_100H`;
+  - `DEAD_HERBACEOUS`;
+  - `LIVE_HERBACEOUS`;
+  - `LIVE_WOODY`;
+- `RothermelFuelModel` with explicit SI-unit fields;
+- burnable/nonburnable validation;
+- per-loaded-class SAV/heat-content/particle-density validation;
+- `RothermelFuelMoisture` with five external moisture inputs;
+- six-class moisture expansion with dead-herbaceous moisture initially following dead 1-h moisture;
+- live fuel moisture values above 1.0 allowed on a dry-mass basis;
+- `RothermelInputs` with:
+  - midflame wind speed;
+  - explicit meteorological `wind_from_direction_deg`;
+  - slope;
+  - aspect;
+- 10-m/20-ft to midflame wind adjustment intentionally kept outside the core Rothermel input contract.
 
-- `SpatialLayer` for static `(Y, X)` arrays;
-- `SpatialLayer` for dynamic `(T, Y, X)` arrays;
-- optional `units` metadata;
-- optional `nodata` metadata;
-- uniform `at(time_index)` access;
-- `EnvironmentalData` named layer collection;
-- shared spatial-shape validation;
-- shared dynamic time-length validation;
-- aligned `snapshot(time_index)` output.
+The first behavior implementation is therefore sequenced as **Rothermel reference first**, while FBP remains planned for later Cell2Fire-oriented work. This is a development-order decision rather than a product-level preference.
 
-The initial temporal contract uses integer time indices only. Physical datetimes/interpolation are intentionally deferred until a concrete weather-data integration is implemented.
+### Rothermel documentation
 
-### Documentation added in Milestone C
+Added `docs/ROTHERMEL_REFERENCE.md`, which records:
 
-- `docs/BEHAVIOR_DATA_CONTRACT.md` — exact behavior/data interface, unit policy, direction convention, NoData policy, temporal design, and deferred items;
-- `docs/DESIGN.md` updated with decisions D007/D008;
-- `docs/DEVELOPMENT.md` updated to reflect Milestone C progress.
+- primary scientific references;
+- six-class fuel ordering;
+- SI public-unit policy;
+- moisture conventions;
+- wind/slope/aspect conventions;
+- independent-implementation/license rule;
+- staged implementation plan R1–R6;
+- validation strategy against authoritative references plus independent software implementations.
 
 ### Tests / CI
 
-New tests cover:
+New Rothermel contract tests cover:
 
-- valid/invalid `FireBehaviorResult` values;
-- model-specific input compatibility through a dummy behavior implementation;
-- static/dynamic `SpatialLayer` behavior;
-- invalid layer dimensions/dtypes;
-- environmental spatial alignment;
-- dynamic time-length alignment;
-- missing layer errors;
-- static + dynamic snapshot behavior.
+- stable six-class ordering;
+- valid burnable fuel models;
+- invalid depth/extinction/load conditions;
+- loaded-class physical-property requirements;
+- nonburnable zero-valued fuel models;
+- six-value tuple length/fraction validation;
+- moisture expansion and live moisture > 1.0;
+- wind/slope/direction input validation.
 
-After Ruff-driven style corrections, the latest quality job passes lint, format checking, and tests. Python 3.12/3.13 jobs are green; Python 3.11 tests also passed and the workflow was completing its final cleanup at the last check.
+Latest CI run for the formatted Rothermel contract is fully green across quality checks and Python 3.11/3.12/3.13.
 
 ## Key decisions now implemented
 
-1. **CA propagation and fire behavior stay separate.**
-2. **Behavior outputs are standardized; model-native inputs are not artificially unified.**
-3. **Common behavior quantities use explicit SI-derived units in field names.**
-4. **Common spread direction is clockwise from geographic north.**
-5. **Environmental data remain array-first and lightweight.**
-6. **Static `(Y, X)` and dynamic `(T, Y, X)` data share one access pattern.**
-7. **Physical time interpolation is deferred rather than guessed.**
-8. **NoData is metadata only at this stage; the numerical kernel does not silently impute missing data.**
-9. **NumPy remains the scientific reference path.**
+1. CA propagation and fire behavior remain separate.
+2. Behavior outputs are standardized; model-native inputs remain model-specific.
+3. Public behavior/Rothermel contracts use explicit SI-derived units.
+4. Environmental data remain array-first and lightweight.
+5. Physical time interpolation remains deferred.
+6. NoData is not silently imputed.
+7. NumPy remains the readable scientific reference path.
+8. Rothermel is implemented first for reference/validation; FBP follows for Cell2Fire-oriented comparison.
+9. The six-class fuel representation is fixed before equation implementation so later Scott--Burgan-style dynamic fuels do not require a public-API redesign.
+10. Wind input to Rothermel is explicitly midflame wind; wind-adjustment-factor logic belongs outside the core equation contract.
 
 ## Not implemented yet
 
-### Milestone C remaining work
+### Immediate scientific work
 
-- first real model-specific behavior input dataclass;
-- initial fuel representation;
-- first scientifically validated fire-behavior implementation;
-- GIS CRS / transform / extent alignment validation;
+- Rothermel legacy/native-unit conversion helpers and tests;
+- R1 base fuel quantities;
+- R2 no-wind/no-slope ROS;
+- authoritative numeric reference fixtures;
+- complete Rothermel wind/slope effects;
+- conversion to `FireBehaviorResult` from a real model calculation.
+
+### Milestone C GIS/data work
+
+- CRS/transform/extent alignment validation;
 - optional Rasterio read/write adapter;
-- explicit mapping from GIS NoData to wildfire/unburnable state;
-- physical weather time-coordinate policy.
+- GIS NoData-to-unburnable policy;
+- physical weather timestamps/interpolation.
 
-### CA research extensions
+### Later CA research
 
-- probabilistic rule;
+- first behavior-informed CA transition rule;
+- probabilistic rules;
 - directional/adaptive neighborhoods;
-- asynchronous/event-driven scheduler;
-- sparse/active-cell update representation;
-- distance accumulation / Cell2Fire-like rule.
-
-### Wildfire processes
-
-- validated Rothermel implementation;
-- validated FBP implementation;
+- asynchronous/event-driven scheduling;
+- active/sparse updates;
+- Cell2Fire-like distance accumulation;
+- FBP;
 - arrival time;
-- crown fire;
-- spotting;
-- suppression;
-- Monte Carlo experiment layer.
-
-### Scientific validation
-
-- independent Rothermel/FBP reference calculations;
-- Cell2Fire controlled comparison scenarios;
-- grid-size/time-step sensitivity;
-- directional/lattice-bias experiments.
+- crown fire / spotting / suppression;
+- Monte Carlo experiment layer;
+- profiling-led Numba optimization.
 
 ## Scope boundaries that remain fixed
 
-- PyFireCA is wildfire-specific, not an urban CA product.
-- UrbanVCA / PLUS / intPLUS / Mesa-Geo remain engineering references only.
-- PyTorchFire-style differentiable CA remains deferred.
-- Level Set / front tracking remain comparison methods, not core engines.
-- GIS file I/O stays outside numerical CA kernels.
-- Do not introduce plugin/backend/platform abstractions without a concrete requirement.
+- wildfire CA product, not urban CA product;
+- urban CA projects remain engineering/GIS references only;
+- PyTorchFire/differentiable CA deferred;
+- Level Set/front tracking are comparison methods only;
+- GIS file I/O stays outside numerical kernels;
+- no plugin/backend/platform architecture without demonstrated need.
 
 ## Immediate next target
 
-The next implementation target is to select and formalize the **first real behavior-model input contract and fuel representation** before adding a full equation set.
-
-Recommended order:
+Continue the Rothermel reference implementation in small validated stages:
 
 ```text
-1. choose first reference behavior family
-2. define its typed input dataclass
-3. define fuel-model representation needed by that family
-4. document source variables + units
-5. add validation/reference fixtures
-6. then implement equations
+R1  explicit unit conversions + base fuel quantities
+ ↓
+R2  no-wind / no-slope surface ROS
+ ↓
+R3  wind + slope effects
+ ↓
+R4  FireBehaviorResult
+ ↓
+R5  independently verified standard fuel catalogues
+ ↓
+R6  behavior-informed CA integration
 ```
 
-For a Cell2Fire-oriented research line, FBP is strategically important; for a simpler independent surface-fire reference path, Rothermel is also useful. The choice should be made based on which reference calculations can be validated most rigorously first, not on implementation convenience alone.
+Do not begin Cell2Fire-like distance accumulation until at least one fire-behavior path can produce independently validated ROS values.
