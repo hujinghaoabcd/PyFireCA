@@ -8,6 +8,7 @@ from pyfireca.behavior.rothermel import (
     RothermelFuelMoisture,
     RothermelInputs,
 )
+from pyfireca.behavior.rothermel_model import RothermelModel
 
 __all__ = [
     "FireBehaviorModel",
@@ -17,4 +18,5 @@ __all__ = [
     "RothermelFuelModel",
     "RothermelFuelMoisture",
     "RothermelInputs",
+    "RothermelModel",
 ]
