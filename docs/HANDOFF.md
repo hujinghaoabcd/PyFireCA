@@ -8,7 +8,7 @@
 
 Repository: `hujinghaoabcd/PyFireCA`
 
-PyFireCA is a **wildfire cellular-automata research framework**. The primary research target is the CA itself.
+PyFireCA is a **wildfire cellular-automata research framework**. The primary research target remains the CA; fire-behavior models provide physically meaningful local spread inputs to that CA.
 
 Protected extension points:
 
@@ -29,12 +29,14 @@ Do not casually reverse these decisions:
 6. fire behavior and CA propagation remain separate;
 7. GIS I/O stays outside numerical kernels;
 8. behavior outputs standardized, model-native inputs remain typed/model-specific;
-9. Rothermel first, FBP later for Cell2Fire-oriented work;
+9. Rothermel first, FBP later;
 10. Rothermel public inputs use explicit SI units and midflame wind;
-11. R1 remains separate from R2 reaction/heat-transfer equations;
-12. R2 is explicitly **Albini-adjusted Rothermel**;
-13. external numerical references carry evidence grades and provenance;
-14. GIS alignment, domain semantics, and dynamic missing-data handling are explicit rather than inferred.
+11. R2 is explicitly **Albini-adjusted Rothermel**;
+12. wind and slope are vector-combined when non-collinear;
+13. meteorological wind-from, downwind push, downslope aspect, and upslope bearing are separate concepts;
+14. the optional operational wind limit defaults to disabled;
+15. external numerical references carry evidence grades and pinned provenance;
+16. GIS alignment, domain semantics, and dynamic missing-data handling are explicit rather than inferred.
 
 ## 2. Current source tree
 
@@ -52,10 +54,16 @@ src/pyfireca/
     ├── __init__.py
     ├── base.py
     ├── _units.py
-    └── rothermel.py
+    ├── _directions.py
+    ├── rothermel.py
+    ├── _rothermel_equations.py
+    ├── _rothermel_base.py
+    ├── _rothermel_effects.py
+    ├── _rothermel_vectors.py
+    └── rothermel_model.py
 ```
 
-Do not create empty `config.py`, `metrics.py`, `fbp.py`, backend packages, or plugin systems merely to match a future architecture diagram.
+Do not create empty future modules merely to match an architecture diagram.
 
 ## 3. CA core truth
 
@@ -68,21 +76,13 @@ BURNING    = 2
 BURNED     = 3
 ```
 
-Reference transitions are **synchronous**. `TransitionRule.next_state()` reads the complete old state, returns a complete next state, and `Simulation` replaces the grid only after evaluation finishes.
+Reference transitions are **synchronous**. `TransitionRule.next_state()` reads the complete old state and returns a complete next state; `Simulation` replaces the grid only after evaluation finishes.
 
-`NeighborIgnitionRule` is architecture-only; it is not physical wildfire behavior.
+`NeighborIgnitionRule` remains an architecture-only baseline, not physical wildfire behavior.
 
-`build_initial_state(domain_mask, ignition_mask)` maps:
+`build_initial_state(domain_mask, ignition_mask)` maps domain/ignition explicitly and rejects ignition outside the domain.
 
-```text
-domain False  → UNBURNABLE
-domain True   → UNBURNED
-ignition True → BURNING
-```
-
-and rejects ignition outside the domain.
-
-## 4. Common behavior/data contract
+## 4. Behavior/data contract
 
 CA-facing behavior output:
 
@@ -94,9 +94,18 @@ flame_length_m              optional
 diagnostics                 optional
 ```
 
-`SpatialLayer` supports `(Y, X)` and `(T, Y, X)`. `EnvironmentalData` requires one spatial shape and one dynamic time length.
+For current `RothermelModel`:
 
-Two snapshot APIs now intentionally have different semantics:
+- spread rate is implemented;
+- maximum-spread direction is implemented when a directional effect exists;
+- zero-wind/zero-slope returns `spread_direction_deg=None`;
+- `fireline_intensity_w_m=None`;
+- `flame_length_m=None`;
+- Rothermel-specific validated intermediate quantities live in `diagnostics`.
+
+Do not populate intensity/flame-length fields until their output paths receive independent validation.
+
+`SpatialLayer` supports `(Y, X)` and `(T, Y, X)`. `EnvironmentalData` requires one spatial shape and one dynamic time length.
 
 ```text
 snapshot(...)
@@ -106,19 +115,11 @@ require_complete_snapshot(required_layers, time_index=...)
     explicit fail-fast gate
 ```
 
-`require_complete_snapshot()` rejects declared NoData and any additional non-finite values in selected required layers. It does not interpolate, fill, mask, skip time indices, or modify permanent CA state.
+Missing dynamic inputs are never silently filled or converted into persistent domain state.
 
-Raised exception:
+## 5. GIS baseline — stable and paused
 
-```text
-MissingEnvironmentalDataError
-```
-
-This is the safe baseline for future dynamic weather integration.
-
-## 5. GIS raster contract — stable baseline
-
-Implemented in `gis.py`:
+Implemented:
 
 ```text
 RasterMetadata
@@ -128,81 +129,20 @@ validate_named_raster_alignment
 read_raster
 write_raster
 write_state_raster
+nodata_mask
+build_domain_mask
+LandscapeInput
 ```
 
-Geometric alignment requires:
+Alignment requires identical shape, canonical CRS, and affine transform within explicit tolerance. Simulation never silently reprojects/resamples.
 
-```text
-same shape
-same canonical CRS
-same full affine transform within explicit tolerance
-```
-
-No implicit reprojection/resampling/cropping/origin shifts are permitted inside simulation.
-
-Rasterio is optional through:
-
-```bash
-pip install -e ".[gis]"
-```
-
-and has a dedicated `gis` GitHub Actions job.
-
-## 6. NoData and persistent-domain semantics — fixed
-
-General rule:
+NoData rule:
 
 > **NoData is metadata until explicitly converted into domain semantics.**
 
-`nodata_mask(layer)` checks only the declared marker:
+Only explicitly selected static layers may define persistent `UNBURNABLE` cells. Dynamic missing wind/moisture uses the fail-fast snapshot gate instead.
 
-- numeric sentinels supported;
-- declared NaN supported;
-- arbitrary NaN is not guessed as NoData when `nodata=None`.
-
-`build_domain_mask(environment, layer_names)`:
-
-- requires explicit layer selection;
-- accepts static layers only;
-- combines declared NoData locations from those selected layers;
-- rejects dynamic layers.
-
-Reason: transient missing wind/moisture must not permanently change a cell to `UNBURNABLE`.
-
-Dynamic missing data instead use the fail-fast required-snapshot gate described above.
-
-## 7. `LandscapeInput` — current geospatial assembly boundary
-
-```text
-LandscapeInput
-├── environment: EnvironmentalData
-├── metadata: RasterMetadata
-└── initial_state: integer (Y, X)
-```
-
-Invariant:
-
-```text
-environment.spatial_shape
-== metadata.shape
-== initial_state.shape
-```
-
-`LandscapeInput.from_domain_layers()` assembles state from explicit static domain layers and optional ignition mask. `make_grid()` returns an independent `RasterGrid` copy.
-
-Ownership remains:
-
-```text
-LandscapeInput → shared spatial metadata + initial input
-RasterGrid     → evolving CA state
-Simulation     → orchestration
-```
-
-Do not duplicate CRS/transform on every layer or infer an unsafe scalar cell size from arbitrary affine geometry.
-
-## 8. State GeoTIFF convention — fixed
-
-`write_state_raster()` writes:
+State GeoTIFF:
 
 ```text
 dtype          uint8
@@ -210,9 +150,7 @@ state codes    0..3
 GeoTIFF NoData None
 ```
 
-`UNBURNABLE=0` is a real model state and is not file-level NoData. Do not propagate input sentinels such as `-9999` into state outputs.
-
-## 9. Rothermel input / R1 truth
+## 6. Rothermel public input truth
 
 Fixed six-class order:
 
@@ -225,7 +163,7 @@ LIVE_HERBACEOUS
 LIVE_WOODY
 ```
 
-Core input fields:
+`RothermelInputs`:
 
 ```text
 fuel
@@ -236,9 +174,17 @@ slope_deg
 aspect_deg
 ```
 
-10-m/20-ft wind adjustment remains external.
+Conventions:
 
-R1 implemented and tested:
+- wind speed is **midflame**;
+- wind direction is meteorological **from** direction;
+- aspect is geographic **downslope** bearing;
+- public geographic bearings are clockwise from north;
+- 10-m/20-ft wind adjustment remains external.
+
+## 7. R1 — complete
+
+Implemented and tested:
 
 ```text
 SI ↔ ft/lb/Btu/min conversions
@@ -249,136 +195,251 @@ compute_bulk_density_kg_m3
 compute_optimum_packing_ratio
 ```
 
-Do not redesign R1 just to make R2 shorter.
+## 8. R2 — validated static heterogeneous base ROS
 
-## 10. R2 reference variant and validation gate
-
-Target:
+Target formulation:
 
 > **Albini-adjusted Rothermel surface fire**
 
-Locked Albini 1976 changes:
+Implemented:
 
-1. combustible loading correction;
-2. revised reaction-velocity exponent `A = 133 * sigma^-0.7913`;
-3. revised live moisture-of-extinction calculation with dead-Mx lower bound;
-4. revised dead/live reaction-intensity treatment.
+```text
+combustible/net loading
+SAV size-bin weighted combustible load
+mineral damping
+moisture damping
+live moisture of extinction
+Albini reaction-velocity exponent
+maximum and actual reaction velocity
+dead/live reaction intensity
+propagating flux
+heat-of-preignition/effective-heating terms
+heat sink
+no-wind/no-slope ROS
+```
 
-Andrews 2018 is the modern consolidated consistency reference.
+`_rothermel_base.py` exposes:
 
-Validation grades:
+```text
+BaseSpreadResult
+compute_base_spread_result(...)
+compute_base_spread_rate_m_s(...)
+```
+
+The latter remains a compatibility wrapper.
+
+Pinned Grade B references:
+
+```text
+FM1
+4.4262698923571939 chains/h
+0.024733996158492002 m/s
+
+FM2 static dead+live
+2.3810521029916596 chains/h
+0.013305319151517395 m/s
+```
+
+Dynamic fuel models still raise until herbaceous load transfer is explicit.
+
+## 9. R3 — wind, slope, and direction
+
+### R3a slope
+
+Pinned FM1 30% slope, zero-wind result:
+
+```text
+20.817222076028628 chains/h
+```
+
+Public slope is degrees, so 30% slope is `atan(0.3)` in the model input.
+
+### R3b wind
+
+Pinned FM1 zero-slope, 100 ft/min direct-midflame result:
+
+```text
+8.834274755440232 chains/h
+```
+
+### R3c optional wind limit
+
+FM1 reference quantities:
+
+```text
+reaction intensity 159495.8270605292 W/m²
+limit              758.3986638051593 ft/min
+                   3.85266521213021 m/s
+limited ROS        1.6614603649165824 m/s
+```
+
+`RothermelModel(use_wind_speed_limit=False)` is the default.
+
+The official pinned Behave regression validates ROS at the computed boundary wind speed. Python unit tests validate enable/exceeded/capping semantics.
+
+### R3d non-collinear vector composition
+
+Do **not** use `1 + phi_w + phi_s` for non-collinear wind and slope.
+
+```text
+slope_rate = R0 * phi_s
+wind_rate  = R0 * phi_w
+x = slope_rate + wind_rate*cos(delta)
+y = wind_rate*sin(delta)
+Rmax = R0 + hypot(x, y)
+```
+
+Pinned perpendicular case:
+
+```text
+FM1
+30% slope
+100 ft/min wind
+wind push 90° from upslope
+maximum ROS = 21.399596624626479 chains/h
+```
+
+The pinned Behave workflow passes for **maximum spread magnitude**.
+
+Direction is computed from `atan2(y, x)` and converted through explicit geographic adapters. It is analytically tested and aligned to Behave source logic, but is not labelled as an independent Grade B direction output yet.
+
+## 10. R4 — public model assembly — implemented
+
+Public API:
+
+```python
+from pyfireca.behavior import RothermelModel
+
+result = RothermelModel().compute(inputs)
+```
+
+Assembly:
+
+```text
+compute_base_spread_result
+        ↓
+phi_s + phi_w
+        ↓
+wind/slope vector composition
+        ↓
+effective wind
+        ↓
+optional wind limit
+        ↓
+geographic direction conversion
+        ↓
+FireBehaviorResult
+```
+
+Diagnostics include:
+
+```text
+base_spread_rate_m_s
+reaction_intensity_w_m2
+characteristic_sav_m_inv
+packing_ratio
+relative_packing_ratio
+wind_factor
+slope_factor
+effective_factor
+effective_wind_speed_m_s
+wind_speed_limit_m_s
+wind_limit_enabled
+wind_limit_exceeded
+```
+
+End-to-end tests cover base, slope-only, wind-only, perpendicular wind+slope, optional high-wind cap, dynamic-fuel rejection, and input-option validation.
+
+## 11. Validation provenance
+
+Evidence grades:
 
 ```text
 Grade A  primary/authoritative worked value
 Grade B  official operational software regression
 Grade C  independent implementation comparison
-Grade D  internal synthetic/analytical fixture
+Grade D  internal analytical/synthetic fixture
 ```
 
-Pinned:
+Pinned operational revisions:
 
 ```text
-tests/validation/data/albini1976_worked_examples.csv
-tests/validation/data/behave7_surface_reference.csv
+firelab/behave-app
+a3cfcd5903188d73445948af16644868225bb9d5
+
+firelab/behave
+29888c7ad364aa18cfb340f4c25a8e395f24260f
 ```
 
-Current scientific gap:
-
-> no precise external **zero-wind + zero-slope** value has yet been locked for the selected Albini-adjusted R2 chain.
-
-Do not fabricate a Grade A fixture from PyFireCA calculations.
-
-Acceptable fallback: run a pinned official Behave 7 build for an exact zero-wind/zero-slope case and record it as Grade B with exact revision/input/output provenance.
-
-## 11. Latest verified CI state
-
-Latest verified run:
+Workflows:
 
 ```text
-workflow 31562488352
-commit   b5bdedebe8226d85719d6947a6043db866a579d4
+.github/workflows/behave7-r2-probe.yml
+.github/workflows/behave7-r3-vector.yml
 ```
 
-Everything passed:
+The R3 vector workflow is green after fixing CSV line endings. The scalar workflow no longer modifies/builds a custom C++ wind-limit probe; it uses official `testSurface` cases only.
+
+## 12. CI truth
+
+The R4 functional suite has already passed on:
 
 ```text
-quality: Ruff lint / Ruff format / pytest+coverage  ✓
-gis: Rasterio integration                          ✓
-Python 3.11                                        ✓
-Python 3.12                                        ✓
-Python 3.13                                        ✓
+Python 3.11  ✓
+Python 3.12  ✓
+Python 3.13  ✓
+GIS          ✓
 ```
 
-This baseline includes:
+After formatting-only cleanup, use the latest all-green run as the canonical CI baseline; do not preserve an obsolete run ID in this handoff.
 
-- NoData/domain tests;
-- `LandscapeInput` tests;
-- canonical state GeoTIFF tests;
-- required dynamic snapshot fail-fast tests.
+## 13. Exact next work
 
-## 12. Exact next work
-
-The GIS/data foundation is now sufficient to **pause**. Do not add xarray, NetCDF, temporal interpolation, high-level loaders, or preprocessing frameworks without a concrete integration.
-
-Return to the R2 scientific gate:
+Do **not** return to R1/R2 unless a regression appears. The immediate scientific line is now:
 
 ```text
-1. Obtain reproducible zero-wind + zero-slope external reference
-2. Pin provenance and evidence grade
-3. Implement formula-level Albini-adjusted pure functions
-4. Assemble and validate base ROS
-5. Only then add wind/slope
-6. Then expose RothermelModel.compute() → FireBehaviorResult
+1. Verify/finalize standard fuel catalogue values
+2. Implement explicit dynamic herbaceous curing/load transfer
+3. Add catalogue + dynamic-fuel reference cases
+4. Design first behavior-informed CA transition rule
+5. Convert continuous ROS/direction to discrete neighbor travel/arrival time
+6. Validate spread geometry and arrival time
 ```
 
-Expected R2 functions after the fixture gate:
+The first CA coupling should consume `FireBehaviorResult`; `Simulation` must not branch on model names.
 
-```text
-combustible/net fuel loading
-mineral damping
-moisture damping
-live moisture of extinction
-Albini reaction-velocity exponent
-maximum/actual reaction velocity
-dead/live reaction intensity
-propagating flux ratio
-effective heating number
-heat of preignition
-heat source/sink
-base ROS
-```
-
-## 13. Deferred work
+## 14. Deferred work
 
 Do not pull forward yet:
 
 ```text
 physical timestamp/interpolation framework
 NetCDF/xarray adapter
-Cell2Fire-like distance accumulation
 FBP
-probabilistic/learned CA
 crown fire
 spotting
 suppression
 Monte Carlo framework
 Numba optimization
 Torch/JAX/GPU
+learned/differentiable CA
 ```
 
-The first behavior-informed CA rule comes only after a physical ROS path is independently validated.
+Fireline intensity/flame length should also remain deferred until their equations are separately validated.
 
-## 14. Files to read first next session
+## 15. Files to read first next session
 
 ```text
 1. docs/STATUS.md
 2. docs/HANDOFF.md
 3. docs/ROTHERMEL_REFERENCE.md
 4. docs/VALIDATION.md
-5. docs/GIS_DATA_CONTRACT.md
-6. src/pyfireca/behavior/rothermel.py
-7. src/pyfireca/data.py
-8. src/pyfireca/gis.py
+5. src/pyfireca/behavior/rothermel_model.py
+6. src/pyfireca/behavior/_rothermel_base.py
+7. src/pyfireca/behavior/_rothermel_effects.py
+8. src/pyfireca/behavior/_rothermel_vectors.py
+9. src/pyfireca/behavior/_directions.py
+10. src/pyfireca/behavior/rothermel.py
 ```
 
 The handoff describes repository truth, not planned work that was never implemented.
