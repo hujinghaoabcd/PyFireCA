@@ -1,4 +1,4 @@
-"""Stable file outputs for the baseline static wildfire simulator."""
+"""Stable spatial outputs for the baseline static wildfire simulator."""
 
 from __future__ import annotations
 
@@ -17,14 +17,13 @@ _ARRIVAL_NODATA_S = -1.0
 
 @dataclass(frozen=True, slots=True)
 class StaticSimulationOutputPaths:
-    """Paths written for one baseline static simulation result."""
+    """Spatial paths written for one baseline static simulation result."""
 
     directory: Path
     arrival_time: Path
     state: Path
     burned_mask: Path
     perimeter: Path
-    metrics: Path
 
 
 def terminal_state_from_result(result: StaticWildfireSimulationResult) -> np.ndarray:
@@ -109,13 +108,14 @@ def write_static_simulation_outputs(
     result: StaticWildfireSimulationResult,
     directory: str | Path,
 ) -> StaticSimulationOutputPaths:
-    """Write the minimum stable GIS/JSON outputs for one static run.
+    """Write the stable spatial outputs for one static run.
 
     ``arrival_time.tif`` stores finite arrival seconds and uses ``-1`` as a
     file-level NoData marker for cells with no finite arrival. Arrival times are
     physically non-negative, so this marker cannot collide with a valid value.
     ``state.tif`` is the terminal canonical state rather than an arbitrary
-    physical-time snapshot.
+    physical-time snapshot. Run-level statistics belong to the run directory's
+    single root ``metrics.json`` and are not duplicated here.
     """
 
     if not isinstance(result, StaticWildfireSimulationResult):
@@ -130,7 +130,6 @@ def write_static_simulation_outputs(
         state=output_dir / "state.tif",
         burned_mask=output_dir / "burned_mask.tif",
         perimeter=output_dir / "perimeter.geojson",
-        metrics=output_dir / "metrics.json",
     )
 
     arrival = np.where(
@@ -147,9 +146,4 @@ def write_static_simulation_outputs(
     burned_metadata = replace(result.metadata, nodata=None)
     write_raster(paths.burned_mask, burned, burned_metadata)
     write_burned_perimeter_geojson(result, paths.perimeter)
-
-    paths.metrics.write_text(
-        json.dumps(result.summary_metrics(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
     return paths
