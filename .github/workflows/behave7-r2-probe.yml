@@ -44,17 +44,19 @@ jobs:
               raise SystemExit("Could not locate testSurface main() for precision-only patch")
           source = source.replace(main_needle, main_replacement, 1)
 
-          run_needle = "  // Perform Run\n  behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"
-          run_replacement = """  // Enable the optional operational wind limit only for the dedicated
-          // 1000 ft/min reference row. Scientific equation/core sources remain unchanged.
-          behaveRun.surface.setIsWindLimitEnabled(inputs.windSpeed == 1000.0);
-
-          // Perform Run
-          behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"""
-          if run_needle not in source:
-              raise SystemExit("Could not locate testSurface run call for wind-limit harness patch")
-          path.write_text(source.replace(run_needle, run_replacement, 1))
+          run_call = "  behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"
+          if source.count(run_call) != 1:
+              raise SystemExit(f"Expected exactly one testSurface run call; found {source.count(run_call)}")
+          injected = (
+              "  behaveRun.surface.setIsWindLimitEnabled(inputs.windSpeed == 1000.0);\n"
+              + run_call
+          )
+          source = source.replace(run_call, injected, 1)
+          path.write_text(source)
           PY
+
+          echo "--- Patched testSurfaceModule excerpt ---"
+          nl -ba behave-app/behave-lib/test/cpp/testSurface.cpp | sed -n '235,285p'
 
       - name: Build official testSurface executable
         run: |
