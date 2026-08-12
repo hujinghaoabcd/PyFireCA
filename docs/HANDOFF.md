@@ -40,6 +40,7 @@ Fire behavior and GIS support the CA but do not define the simulation engine.
 13. Rothermel is the first behavior reference implementation; FBP remains required later for Cell2Fire-oriented comparisons.
 14. Rothermel legacy-unit conversion is centralized rather than duplicated inside equation functions.
 15. R1 heterogeneous-fuel weighting/base quantities are independently testable and remain separate from the R2 reaction/heat-transfer chain.
+16. R2 follows an explicitly documented Albini-adjusted Rothermel operational line rather than an unlabelled mixture of 1972 and later formulas.
 
 The Rothermel-first choice is a sequencing decision, not a claim that Rothermel is universally preferable to FBP.
 
@@ -354,17 +355,22 @@ Computed as total oven-dry load / fuel-bed depth. Synthetic fixture expects `3 k
 
 The SI characteristic SAV is explicitly converted to inverse feet before applying the published legacy-unit correlation. Zero returns zero; negative characteristic SAV raises.
 
-## 11. R2 decision gate — do not skip
+## 11. R2 reference variant — Albini-adjusted Rothermel
 
 The next scientific stage is **not** just “copy the rest of Rothermel”.
 
-Before implementing no-wind/no-slope ROS, reconcile the exact reference formulation across Rothermel 1972, Albini 1976, and Andrews 2018.
+Albini 1976 explicitly documents significant modifications to the Rothermel 1972 computation path used in FIREMODS-based fire-behavior calculations:
 
-A concrete discrepancy already observed in independent software is that later implementations use an Albini replacement for the reaction-velocity exponent/correlation rather than the original 1972 expression. Other intermediate conventions, including net fuel loading and live/dynamic-fuel treatment, also need primary-source resolution.
+1. combustible fuel loading uses `W0 * (1 - S_T)` rather than `W0 / (1 + S_T)`;
+2. the reaction-velocity exponent is replaced by `A = 133 * sigma^-0.7913` to avoid divergence of the original expression;
+3. live moisture of extinction uses a revised exponentially weighted fine-fuel calculation and is bounded below by dead-fuel moisture of extinction rather than a fixed 0.3;
+4. dead and live reaction intensities are added rather than combined by the earlier category surface-area weighted average.
 
-Do not mix formulas from different vintages because they happen to coexist in reference software.
+Andrews 2018 explicitly describes the operational Rothermel surface-fire model as using adjustments by Albini in 1976 and consolidates the associated equations.
 
-The selected R2 formulation must be named/documented and backed by authoritative numeric fixtures before the complete ROS chain is accepted.
+Therefore PyFireCA's R2 target is now explicitly the **Albini-adjusted Rothermel surface-fire reference**. This avoids silently mixing 1972 and later operational formulas.
+
+Authoritative numerical fixtures are still required before the complete no-wind/no-slope ROS chain is accepted.
 
 ## 12. Scientific source / provenance rule
 
@@ -435,7 +441,7 @@ Do **not** redesign the R1 input/weighting contract and do **not** jump to Cell2
 Next sequence:
 
 ```text
-R2a reconcile Rothermel 1972 vs Albini/Andrews corrections
+R2a lock Albini-adjusted equations in documentation
  ↓
 R2b create authoritative numerical fixtures
  ↓
@@ -444,12 +450,13 @@ R2c implement formula-level pure functions
 R2d assemble validated no-wind/no-slope ROS
 ```
 
-The formula-level functions expected after the decision gate include:
+The formula-level functions expected after the reference-variant decision include:
 
 ```text
+combustible/net fuel loading
 mineral damping
 moisture damping
-net fuel loading
+live moisture of extinction
 reaction velocity/intensity
 propagating flux ratio
 effective heating number
@@ -472,20 +479,20 @@ Resolved:
 - six-class Rothermel fuel representation;
 - midflame wind as core behavior input;
 - explicit central unit-conversion layer;
-- R1 surface-area weighting, characteristic SAV, packing ratio, bulk density, and optimum packing ratio.
+- R1 surface-area weighting, characteristic SAV, packing ratio, bulk density, and optimum packing ratio;
+- R2 reference line: Albini-adjusted Rothermel rather than unlabelled mixing of original/revised formulas.
 
 Still open:
 
-1. exact R2 correction/equation set (1972 original vs later Albini/Andrews operational corrections);
-2. authoritative numerical fixtures for R2;
-3. live moisture-of-extinction implementation;
-4. dynamic herbaceous curing implementation;
-5. physical weather timestamps/interpolation;
-6. sparse vs full-array CA transitions after profiling;
-7. asynchronous/event-driven scheduler architecture;
-8. extra propagation state for Cell2Fire-like distance accumulation;
-9. GeoTIFF/NoData conventions for state and arrival-time outputs;
-10. Monte Carlo RNG stream strategy.
+1. authoritative numerical fixtures for the Albini-adjusted R2 chain;
+2. exact implementation decomposition for live moisture of extinction;
+3. dynamic herbaceous curing implementation;
+4. physical weather timestamps/interpolation;
+5. sparse vs full-array CA transitions after profiling;
+6. asynchronous/event-driven scheduler architecture;
+7. extra propagation state for Cell2Fire-like distance accumulation;
+8. GeoTIFF/NoData conventions for state and arrival-time outputs;
+9. Monte Carlo RNG stream strategy.
 
 Any resolved scientific item must be documented before or with code.
 
