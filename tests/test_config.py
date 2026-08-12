@@ -17,9 +17,7 @@ INPUT_NAMES = (
 
 
 def _yaml(*, extra_root: str = "", omit_input: str | None = None) -> str:
-    input_lines = [
-        f"  {name}: data/{name}.tif" for name in INPUT_NAMES if name != omit_input
-    ]
+    input_lines = [f"  {name}: data/{name}.tif" for name in INPUT_NAMES if name != omit_input]
     return "\n".join(
         [
             "version: 1",
