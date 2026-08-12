@@ -96,9 +96,7 @@ def test_slope_only_matches_pinned_behave_reference_and_points_upslope() -> None
 
 
 def test_wind_only_matches_pinned_behave_reference_and_follows_downwind_push() -> None:
-    result = RothermelModel().compute(
-        _inputs(wind_ft_min=100.0, wind_from_deg=270.0)
-    )
+    result = RothermelModel().compute(_inputs(wind_ft_min=100.0, wind_from_deg=270.0))
 
     assert result.spread_rate_m_s == pytest.approx(0.04936592733340002, rel=1e-13)
     assert result.spread_direction_deg == pytest.approx(90.0, abs=1e-12)
