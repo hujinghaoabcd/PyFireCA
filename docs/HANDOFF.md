@@ -1,318 +1,347 @@
-# PyFireCA Development Handoff
+# PyFireCA development handoff
 
 > Updated: 2026-08-13
 >
-> Purpose: continue from repository truth without reconstructing scientific and engineering decisions from chat history.
+> This is the current handoff entrypoint. Read this before continuing development.
 
-## 1. Highest-priority instruction
+## 1. Project objective
 
-**Do not implement a new PyFireCA-specific CA innovation yet.**
+PyFireCA is a **wildfire-specific**, modular, modern scientific software
+framework for cellular-automata / raster fire-spread simulation.
 
-The simple static simulator is functionally complete, MIT-licensed, and has passed the built-wheel release-candidate gate. The remaining work is intentional publication, not feature completion.
+The current development priority is still:
 
-Current gate:
+> finish and stabilize the simple simulator and its behavior-model layer before
+> returning to original CA-method innovation.
+
+Urban CA projects were used only as engineering/GIS references. PyFireCA is not
+an urban/general GeoCA framework.
+
+## 2. Hard constraints
+
+### Do not publish yet
+
+The package remains `0.1.0a0`. MIT is configured, but no tag/release should be
+created until the user explicitly restarts release work.
+
+### Behavior models must be self-contained
+
+Do not add runtime calls to another fire behavior package.
+
+Forbidden as runtime behavior engines include:
 
 ```text
-choose first baseline version/tag
-→ freeze release notes
-→ create tag/GitHub release
-→ add real release date to CITATION.cff
-→ record released commit/tag
-→ then reopen CA research
+Cell2Fire
+cffdrs / cffdrs_r
+Pyretechnics
+SimFire
+GridFire
+C2FK
+Behave / Prometheus
 ```
 
-Research ideas remain preserved in:
+These may be used for literature tracing, architecture study, and independent
+regression comparison only.
+
+### Do not resume the custom CA paper method yet
+
+Research ideas are stored in `FUTURE_RESEARCH.md`. Record new ideas there but
+do not implement extended/adaptive neighborhoods, new edge coupling, or other
+original CA methods unless that phase is explicitly restarted.
+
+### PyTorchFire remains out of scope
+
+No differentiable CA, neural CA, Torch/JAX backend, GPU backend, or gradient
+calibration in the current development line.
+
+## 3. Current main simulation architecture
 
 ```text
-docs/FUTURE_RESEARCH.md
+                       PyFireCA
+                           │
+             model-specific data contract
+                           │
+           ┌───────────────┴───────────────┐
+           │                               │
+      Rothermel                        Canadian FBP
+           │                               │
+ directional surface ROS             FBP directional ROS
+           └───────────────┬───────────────┘
+                           ↓
+                StaticArrivalTimeSolver
+                           ↓
+               StaticWildfireSimulationResult
+                           ↓
+                 common GIS output writer
 ```
 
-## 2. Repository and scope
-
-Repository:
+Separate from this physical arrival path, the repository retains the simple
+synchronous CA reference:
 
 ```text
-hujinghaoabcd/PyFireCA
+RasterGrid
+→ Neighborhood
+→ TransitionRule
+→ Simulation.step()
 ```
 
-Scope:
+Do not collapse these two concepts into one implementation.
 
-> Wildfire cellular automata / raster spread simulation.
+## 4. Rothermel path
 
-Urban CA projects remain engineering/GIS references only. PyTorchFire/differentiable CA is not part of the current baseline.
+The original baseline remains stable and backward compatible.
 
-## 3. Current release-ready baseline
+Main files:
 
-User workflow:
+```text
+behavior/rothermel.py
+behavior/_rothermel_equations.py
+behavior/_rothermel_base.py
+behavior/_rothermel_dynamic.py
+behavior/_rothermel_effects.py
+behavior/_rothermel_vectors.py
+behavior/_surface_ellipse.py
+behavior/rothermel_model.py
+behavior/rothermel_directional.py
+behavior/rothermel_layers.py
+behavior/rothermel_spatial.py
+behavior/rothermel_landscape.py
+config.py
+workflow.py
+simulator.py
+```
+
+Legacy version-1 YAML with no `behavior` block means Rothermel.
+
+## 5. Canadian FBP path
+
+FBP has now been implemented directly in PyFireCA and connected to the same
+arrival/output infrastructure.
+
+Read `BEHAVIOR_MODEL_HANDOFF.md` before modifying it.
+
+Main files:
+
+```text
+behavior/_fbp_constants.py
+behavior/fbp.py
+behavior/fbp_directional.py
+behavior/fbp_layers.py
+behavior/fbp_spatial.py
+behavior/fbp_landscape.py
+fbp_simulator.py
+fbp_config.py
+fbp_workflow.py
+run_config.py
+```
+
+The FBP input schema is intentionally different from Rothermel.
+
+Required raster keys:
+
+```text
+fbp_fuel_type
+ffmc
+bui
+wind_speed_10m
+wind_from_direction
+slope_percent
+aspect
+latitude
+longitude
+elevation
+```
+
+Do not infer these from the Rothermel layers.
+
+FBP YAML explicitly declares:
+
+```yaml
+behavior:
+  model: fbp
+  julian_day: 180
+```
+
+The CLI dispatcher lives in `run_config.py`.
+
+## 6. Crown-fire component
+
+`behavior/crown.py` contains the self-contained Van Wagner + Cruz component.
+It is tested but **not yet connected as a default extension of Rothermel**.
+
+Do not wire it in by simply taking an unvalidated surface intensity. Before
+composition, define:
+
+```text
+canopy cover
+canopy base height
+canopy height
+canopy bulk density
+foliar moisture
+fine-fuel moisture
+surface fireline intensity provenance
+10-m wind
+```
+
+as explicit, validated data contracts.
+
+## 7. KITRAL
+
+C2FK confirms KITRAL is a meaningful independent behavior system, but PyFireCA
+has not implemented it yet.
+
+Before coding:
+
+1. identify the primary published equations;
+2. pin the fuel coefficients and units;
+3. document the Chilean calibration/application domain;
+4. define typed inputs and outputs;
+5. obtain independent numerical fixtures;
+6. only then implement PyFireCA-native equations.
+
+Do not wrap or copy C2FK runtime code.
+
+## 8. Config and CLI compatibility
+
+Current model dispatch:
+
+```text
+version: 1, no behavior block
+→ old Rothermel loader/workflow
+
+version: 1, behavior.model: fbp
+→ FBP loader/workflow
+```
+
+This asymmetry is intentional for backward compatibility.
+
+Do not break all existing Rothermel YAML merely to make the schema visually
+symmetric. A later configuration version may make all behavior models explicit.
+
+Common CLI:
 
 ```bash
-pyfireca validate run.yml
-pyfireca run run.yml
+pyfireca validate config.yml
+pyfireca run config.yml
 ```
 
-Complete path:
+Common output contract:
 
 ```text
-version-1 YAML
-→ 10 aligned GeoTIFFs
-→ strict validation
-→ ignition events
-→ Albini-adjusted Rothermel
-→ Behave/Catchpole directional surface spread
-→ static physical earliest arrival
-→ GeoTIFF / WGS84 GeoJSON outputs
-→ reproducible run directory
+config.resolved.yml
+metadata.json
+environment.json
+metrics.json
+log.txt
+outputs/
+  arrival_time.tif
+  state.tif
+  burned_mask.tif
+  perimeter.geojson
 ```
 
-The first release line is intentionally:
+## 9. Tests that must stay green
+
+General gates:
 
 ```text
-static weather
-north-up square metric rasters
-immediate Moore-8 physical arrival
-source-cell-controlled outgoing ROS
+ruff check .
+ruff format --check .
+pytest
 ```
 
-## 4. Read these first next session
+Python matrix:
 
 ```text
-1. docs/RELEASE_CHECKLIST.md
-2. docs/STATUS.md
-3. docs/HANDOFF.md
-4. CHANGELOG.md
-5. CITATION.cff
-6. docs/FUTURE_RESEARCH.md
+3.11
+3.12
+3.13
 ```
 
-Only after a real baseline release should you return to research-method design.
+GIS integration includes both Rothermel and FBP real-raster workflows.
 
-## 5. Scientific decisions that must not be casually reversed
-
-1. Fire behavior and propagation are separate layers.
-2. NumPy remains the readable reference implementation.
-3. GIS I/O stays outside numerical behavior kernels.
-4. Public physical quantities use explicit units.
-5. The operational Rothermel reference line is **Albini-adjusted Rothermel**.
-6. Wind entering Rothermel is explicit **midflame wind**.
-7. Wind-from, downwind push, downslope aspect, and upslope are distinct semantics.
-8. Wind/slope effects are vector-combined when non-collinear.
-9. Wind-speed limiting is optional and disabled by default.
-10. Dynamic herbaceous curing is load redistribution before the common Rothermel chain.
-11. External numerical references retain evidence grade + pinned provenance.
-12. Fuel records are public only after pinned-source audit.
-13. Maximum/head ROS is never assigned to every raster neighbor.
-14. Off-axis surface spread uses Behave/Catchpole `FromIgnitionPoint`.
-15. One synchronous CA step has no hidden physical duration.
-16. Physical arrival uses distance / direction-specific ROS.
-17. Current physical geometry is north-up + square-cell.
-18. Physical propagation uses immediate-neighbor edges to prevent hidden barrier skipping.
-19. Current heterogeneous baseline is **source-cell-controlled outgoing ROS**.
-20. Research-only interface/neighborhood variants remain absent from the version-1 YAML/CLI.
-21. Static raster units are strict and never silently converted.
-22. Dynamic weather requires a separately designed time-dependent scheduler.
-23. Fireline intensity/flame length remain outside validated baseline public outputs.
-
-## 6. Validated Rothermel truth
-
-Pinned upstream:
+Important FBP tests:
 
 ```text
-firelab/behave-app
-a3cfcd5903188d73445948af16644868225bb9d5
-
-firelab/behave
-29888c7ad364aa18cfb340f4c25a8e395f24260f
+tests/test_fbp.py
+tests/test_fbp_spatial.py
+tests/test_fbp_config.py
+tests/test_fbp_workflow_rasterio.py
 ```
 
-Protected Grade B values include:
+Important crown test:
 
 ```text
-FM1 base                         0.024733996158492002 m/s
-FM2 base                         0.013305319151517395 m/s
-FM1 30% slope                    20.817222076028628 chains/h
-FM1 100 ft/min wind              8.834274755440232 chains/h
-FM1 slope + perpendicular wind   21.399596624626479 chains/h
-GR1 dynamic                      0.003990911424818205 m/s
-FM1 90° off-axis                 0.02921246024622574 m/s
+tests/test_crown_behavior.py
 ```
 
-Do not change scientific formulas to address an engineering/style-only CI failure.
+Do not regenerate scientific reference expectations simply because a code
+change disagrees with them. Investigate the equation/units/directions first.
 
-## 7. Fuel catalogue truth
+## 10. Scientific validation policy
 
-Current audited baseline:
+For a new behavior model, require:
 
 ```text
-FM1–FM13    Anderson 13
-GR1 (101)   Scott–Burgan
+primary scientific reference
+self-contained implementation
+equation tests
+unit/direction tests
+external numerical fixture
+directional spread contract
+spatial integration test
+CLI/GIS test before user-facing support
 ```
 
-Anderson records are pinned to Behave core `src/behave/fuelModels.cpp` at commit `29888c7ad364aa18cfb340f4c25a8e395f24260f`.
+This is now the minimum standard established by Rothermel and FBP.
 
-Remaining Scott–Burgan models do not block this first release.
+## 11. Engineering rules
 
-## 8. Input and simulator contract
-
-Required GeoTIFF keys:
+Continue to preserve:
 
 ```text
-fuel_model                   integer code
-dead_1h_moisture             fraction
-dead_10h_moisture            fraction
-dead_100h_moisture           fraction
-live_herbaceous_moisture     fraction
-live_woody_moisture          fraction
-midflame_wind_speed          m/s
-wind_from_direction          degrees
-slope                        degrees
-aspect                       degrees
+src/ layout
+pyproject.toml as project configuration
+NumPy reference implementation
+strict input units
+explicit RNG where stochastic behavior is introduced
+logging rather than scattered print in library code
+no silent raster resampling
+no silent unit conversion
+real GIS round-trip tests
+reproducible input SHA-256 metadata
 ```
 
-All layers share shape, CRS and full affine transform. The physical baseline additionally requires north-up square cells and explicit metric `cell_size_m` matching affine pixel size.
+Avoid adding abstraction solely for hypothetical future backends.
 
-User-facing API:
+## 12. Next recommended sequence
+
+At the current handoff point:
 
 ```text
-IgnitionEvent
-StaticWildfireSimulationRequest
-StaticWildfireSimulationResult
-run_static_wildfire_simulation
-StaticRunConfig
-validate_static_run
-run_static_config
+1. finish documentation synchronization for Rothermel + FBP
+2. keep new multi-model CLI workflow fully green
+3. optionally expand Scott–Burgan fuel catalogue for Rothermel
+4. define canopy raster/data contract
+5. compose existing Cruz crown component only after validation
+6. perform primary-source KITRAL audit
+7. implement KITRAL only if reference specification is complete
+8. return to CA-method innovation later
 ```
 
-## 9. Run-directory contract
+## 13. Documentation map
+
+Read in this order:
 
 ```text
-runs/<run>/
-├── config.resolved.yml
-├── metadata.json
-├── environment.json
-├── metrics.json
-├── log.txt
-└── outputs/
-    ├── arrival_time.tif
-    ├── state.tif
-    ├── burned_mask.tif
-    └── perimeter.geojson
+STATUS.md
+HANDOFF.md                 ← this file
+BEHAVIOR_MODELS.md         ← behavior architecture/design
+BEHAVIOR_MODEL_HANDOFF.md  ← detailed implementation handoff
+RUNNING_SIMULATOR.md       ← user workflow
+VALIDATION.md
+FUTURE_RESEARCH.md         ← frozen paper ideas
 ```
 
-`metadata.json` records SHA-256 for all ten input rasters plus encountered fuel-model provenance.
-
-## 10. CI/package truth
-
-Release-candidate CI covers:
-
-```text
-quality
-Python 3.11
-Python 3.12
-Python 3.13
-GIS
-package
-```
-
-The final MIT package gate has passed all of the following:
-
-```text
-wheel + sdist build
-License-Expression: MIT in wheel metadata
-LICENSE packaged in wheel
-LICENSE packaged in sdist
-clean wheel install
-pyfireca --help
-clean [gis] wheel install
-Rasterio import
-creation of 10 GeoTIFF inputs from the installed wheel environment
-pyfireca validate
-pyfireca run
-result-file assertions
-```
-
-Therefore the user-facing install/CLI workflow is proven from the built distribution, not only editable source.
-
-## 11. License and package metadata
-
-Project license:
-
-```text
-MIT
-Copyright (c) 2026 Jinghao Hu
-```
-
-Package declaration:
-
-```toml
-license = "MIT"
-license-files = ["LICENSE"]
-```
-
-Minimum build backend:
-
-```text
-hatchling >= 1.27
-```
-
-There are currently no GitHub tags or releases. `CITATION.cff` deliberately has no `date-released` until a real release exists.
-
-## 12. Research work already observed but frozen
-
-Stored in:
-
-```text
-docs/FUTURE_RESEARCH.md
-```
-
-Examples include VN4 vs Moore8 lattice bias, Manhattan/octile analytical arrival error, resolution versus directional convergence, and source-cell versus interface coupling.
-
-Do not resume these before the baseline release is published.
-
-## 13. Exact next actions
-
-Start with `docs/RELEASE_CHECKLIST.md`.
-
-The package version currently is:
-
-```text
-0.1.0a0
-```
-
-A matching first alpha tag would naturally be:
-
-```text
-v0.1.0a0
-```
-
-if that version is selected.
-
-Publication sequence:
-
-```text
-1. choose release version/tag
-2. freeze release notes from CHANGELOG.md
-3. create tag/GitHub release
-4. add actual date-released to CITATION.cff
-5. record release tag/commit in STATUS.md and HANDOFF.md
-6. only then reopen the paper-innovation line
-```
-
-No new scientific feature should be implemented before those publication steps are complete.
-
-## 14. Explicitly deferred beyond the baseline
-
-```text
-remaining Scott–Burgan catalogue
-rotated/non-square affine-aware geometry
-time-varying weather scheduler
-WRF/NetCDF/xarray
-fireline intensity/flame length public validation
-FBP
-crown fire
-spotting
-suppression
-Monte Carlo
-Numba optimization
-GPU / Torch / JAX / differentiable CA
-new PyFireCA-specific CA innovations
-```
+The repository should remain understandable from these documents without
+requiring recovery of chat history.

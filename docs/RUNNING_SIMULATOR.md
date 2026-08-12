@@ -1,107 +1,97 @@
-# Running the Baseline Static Simulator
+# Running the static simulator
 
-PyFireCA's first user-facing simulator is intentionally narrow: a deterministic,
-static-weather, raster wildfire run using the validated Rothermel behavior path,
-Behave/Catchpole directional surface spread, and physical earliest-arrival
-propagation.
+> Updated: 2026-08-13
 
-This document describes the baseline workflow. Experimental CA variants are not
-part of the default simulator.
+PyFireCA currently supports two self-contained static raster behavior paths:
+
+```text
+Rothermel surface-fire behavior
+Canadian FBP behavior
+```
+
+Both feed the same physical earliest-arrival propagation engine and produce the
+same GIS result directory. Experimental PyFireCA-specific CA variants remain
+outside the default simulator.
 
 ## 1. Install
 
-For file-based GIS runs, install the GIS extra:
+For file-based GIS runs:
 
 ```bash
 python -m pip install -e ".[gis]"
 ```
 
-Development installs normally use:
+Development:
 
 ```bash
 python -m pip install -e ".[dev,gis]"
 ```
 
-The installed console entry point is:
+CLI:
 
 ```bash
-pyfireca
+pyfireca --help
+pyfireca validate config.yml
+pyfireca run config.yml
 ```
 
-## 2. Baseline assumptions
+## 2. Shared static assumptions
 
-The first complete simulator is deliberately fail-closed:
+Both current behavior paths are intentionally fail-closed:
 
 ```text
-static raster environment only
-north-up raster only
-square pixels only
-metric cell size supplied explicitly
-one aligned grid for all input rasters
+static raster environment
+north-up grid
+square pixels
+explicit metric cell size
+aligned rasters
 Moore-8 physical propagation baseline
-Rothermel surface fire behavior
-Behave/Catchpole FromIgnitionPoint directional spread
 source-cell-controlled outgoing edge ROS
+static edge travel times
 ```
 
-It does **not** silently convert 10-m wind to midflame wind, percent moisture to
-fractions, percent slope to degrees, or radians to degrees.
-
-Dynamic weather, WRF/NetCDF coupling, crown fire, spotting, suppression, and
-new PyFireCA-specific CA research variants remain outside this baseline.
-
-## 3. Required input rasters
-
-The configuration references exactly ten aligned GeoTIFF layers:
-
-| Key | Meaning | Required unit |
-|---|---|---|
-| `fuel_model` | Standard fuel-model number | integer code |
-| `dead_1h_moisture` | 1-h dead fuel moisture | fraction |
-| `dead_10h_moisture` | 10-h dead fuel moisture | fraction |
-| `dead_100h_moisture` | 100-h dead fuel moisture | fraction |
-| `live_herbaceous_moisture` | live herb moisture | fraction |
-| `live_woody_moisture` | live woody moisture | fraction |
-| `midflame_wind_speed` | midflame wind speed | m/s |
-| `wind_from_direction` | meteorological wind-from bearing | degrees |
-| `slope` | slope angle | degrees |
-| `aspect` | downslope aspect bearing | degrees |
-
-All rasters must share:
+The arrival solver uses:
 
 ```text
-shape
-CRS
-full affine transform
-pixel size
-extent/alignment
+cell-local behavior
+→ direction-specific ROS
+→ edge distance / ROS
+→ edge travel time
+→ earliest arrival time
 ```
 
-The `fuel_model` layer defines the permanent simulation domain through its
-NoData mask. NoData in required behavior layers is allowed outside that domain
-but fails validation inside it.
+Dynamic weather, WRF/NetCDF time-varying forcing, spotting, suppression, and
+new PyFireCA-specific CA methods are not yet part of this workflow.
 
-### Fuel catalogue
+## 3. Choose the behavior path
 
-The current audited baseline contains:
+### 3.1 Rothermel: legacy version-1 schema
 
-```text
-Anderson FM1–FM13
-Scott–Burgan GR1 (101)
-```
+Existing version-1 Rothermel configs remain valid and **do not** need a
+`behavior` block.
 
-The Anderson records and GR1 provenance are pinned to the USFS Fire Lab Behave
-core revision recorded by PyFireCA. Unknown/unaudited fuel codes fail explicitly.
-
-## 4. Configuration file
-
-Use configuration version 1. See:
+Example:
 
 ```text
 examples/static_run.yml
 ```
 
-Minimal structure:
+Required raster keys and units:
+
+| Key | Unit |
+|---|---|
+| `fuel_model` | integer code |
+| `dead_1h_moisture` | fraction |
+| `dead_10h_moisture` | fraction |
+| `dead_100h_moisture` | fraction |
+| `live_herbaceous_moisture` | fraction |
+| `live_woody_moisture` | fraction |
+| `midflame_wind_speed` | m/s |
+| `wind_from_direction` | deg |
+| `slope` | deg |
+| `aspect` | deg |
+
+Example:
 
 ```yaml
 version: 1
@@ -123,18 +113,140 @@ inputs:
 ignitions:
   - row: 100
     col: 120
-    time_s: 0.0
+    time_s: 0
 
 output:
-  directory: runs/static-example
+  directory: runs/rothermel-example
 ```
 
-Relative paths are resolved against the YAML file's directory, not the current
-shell working directory.
+Current audited Rothermel fuel catalogue includes Anderson FM1-FM13 and GR1.
 
-### Ignition events
+### 3.2 Canadian FBP: explicit behavior schema
 
-Each ignition is explicit:
+Example:
+
+```text
+examples/static_fbp_run.yml
+```
+
+FBP must explicitly declare the model:
+
+```yaml
+behavior:
+  model: fbp
+```
+
+Required raster keys and units:
+
+| Key | Unit |
+|---|---|
+| `fbp_fuel_type` | integer code |
+| `ffmc` | code |
+| `bui` | index |
+| `wind_speed_10m` | km/h |
+| `wind_from_direction` | deg |
+| `slope_percent` | percent |
+| `aspect` | deg |
+| `latitude` | deg |
+| `longitude` | deg |
+| `elevation` | m |
+
+Example:
+
+```yaml
+version: 1
+
+behavior:
+  model: fbp
+  julian_day: 180
+  percent_conifer: 50
+  percent_dead_fir: 35
+  grass_fuel_load_kg_m2: 0.35
+  grass_curing_percent: 80
+
+cell_size_m: 30.0
+
+inputs:
+  fbp_fuel_type: data/fbp_fuel_type.tif
+  ffmc: data/ffmc.tif
+  bui: data/bui.tif
+  wind_speed_10m: data/wind_speed_10m.tif
+  wind_from_direction: data/wind_from_direction.tif
+  slope_percent: data/slope_percent.tif
+  aspect: data/aspect.tif
+  latitude: data/latitude.tif
+  longitude: data/longitude.tif
+  elevation: data/elevation.tif
+
+ignitions:
+  - row: 100
+    col: 100
+    time_s: 0
+
+output:
+  directory: runs/fbp-example
+```
+
+Supported numeric FBP codes:
+
+```text
+1  C1       10 M1
+2  C2       11 M2
+3  C3       12 M3
+4  C4       13 M4
+5  C5       14 O1a
+6  C6       15 O1b
+7  C7       16 S1
+8  D1       17 S2
+9  D2       18 S3
+19 NF
+20 WA
+```
+
+`NF` and `WA` become unburnable domain cells in the file workflow.
+
+FBP is implemented inside PyFireCA; the runtime does not call Cell2Fire,
+cffdrs, or another FBP package.
+
+## 4. No hidden cross-model conversions
+
+PyFireCA intentionally does not translate one model's input rasters into the
+other model's inputs.
+
+Examples of operations that are **not** performed implicitly:
+
+```text
+Rothermel fuel moisture → FFMC/BUI
+midflame wind → 10-m FBP wind
+slope degrees → FBP slope percent
+FBP fuel code → Anderson fuel model
+projected x/y → FBP latitude/longitude
+```
+
+If such preprocessing is added later, it will be an explicit preprocessing
+step rather than behavior-kernel magic.
+
+## 5. Raster alignment and domain
+
+All rasters in one run must share:
+
+```text
+shape
+CRS
+full affine transform
+pixel size
+extent/alignment
+```
+
+NoData in a required behavior layer is allowed outside the permanent burnable
+domain but fails validation inside the domain.
+
+Rothermel uses its fuel-model raster NoData contract for the domain. FBP also
+removes explicit `NF` and `WA` cells from the burnable domain.
+
+## 6. Ignitions
+
+Both models use the same ignition contract:
 
 ```yaml
 ignitions:
@@ -146,55 +258,53 @@ ignitions:
     time_s: 600
 ```
 
-The baseline supports:
+Supported:
 
-- one ignition cell;
-- multiple simultaneous ignition cells;
-- multiple ignitions with specified physical times;
-- duplicate cell events, where the earliest event wins.
+- one ignition;
+- multiple simultaneous ignitions;
+- delayed ignitions with physical seconds;
+- repeated cell events, where the earliest event wins.
 
-Ignitions outside the burnable domain fail validation.
+Ignition outside the burnable domain fails validation.
 
-## 5. Validate before running
-
-```bash
-pyfireca validate examples/static_run.yml
-```
-
-Validation checks the configuration and referenced inputs, including:
-
-```text
-required YAML keys
-input file existence
-raster alignment
-north-up square-grid geometry
-explicit cell-size consistency
-NoData/domain semantics
-fuel-model catalogue membership
-static Rothermel input completeness
-ignition bounds and domain membership
-```
-
-A successful validation does not create the run output directory.
-
-## 6. Run
+## 7. Validate
 
 ```bash
-pyfireca run examples/static_run.yml
+pyfireca validate config.yml
 ```
 
-The command validates the same baseline contracts and then executes the static
-physical-arrival simulation.
+Validation checks the model-specific schema and the shared spatial contracts.
+A successful validation does not create the configured output directory.
 
-The configured run directory must be empty if it already exists. PyFireCA does
-not overwrite a previous result directory silently.
-
-## 7. Result directory
-
-A completed run has this baseline structure:
+Examples of failures that are caught before a run:
 
 ```text
-runs/static-example/
+unknown/missing YAML keys
+missing raster file
+misaligned rasters
+wrong model-specific units
+unsupported fuel code
+NoData inside burnable domain
+non-square / rotated grid
+cell_size_m mismatch
+invalid ignition
+```
+
+## 8. Run
+
+```bash
+pyfireca run config.yml
+```
+
+The configured output directory must be absent or empty. PyFireCA does not
+silently overwrite an existing run.
+
+## 9. Common result directory
+
+Both Rothermel and FBP produce:
+
+```text
+runs/<run-name>/
 ├── config.resolved.yml
 ├── metadata.json
 ├── environment.json
@@ -209,118 +319,108 @@ runs/static-example/
 
 ### `config.resolved.yml`
 
-Stores the fully resolved configuration, including absolute input/output paths.
+Stores the resolved model-specific configuration and absolute paths.
 
 ### `metadata.json`
 
-Stores scientific/run provenance, including:
+Contains scientific/run provenance.
+
+Shared information includes:
 
 ```text
-raster shape / CRS / affine transform / cell size
-ignition events
-fuel models encountered
-pinned fuel-catalogue source commit
-SHA-256 for every input raster
+raster geometry
+ignitions
+input SHA-256 hashes
 ```
+
+Rothermel records audited fuel-catalogue provenance. FBP records the model name,
+scientific references, Julian day, encountered FBP codes, and the fact that the
+runtime implementation is self-contained.
 
 ### `environment.json`
 
-Stores execution-environment information such as:
-
-```text
-PyFireCA version
-Python version
-platform
-GitHub commit when available from the execution environment
-```
+Records PyFireCA/Python/platform/Git information when available.
 
 ### `metrics.json`
 
-Current minimum run statistics:
+Minimum metrics:
 
 ```text
-domain cell count
-burned cell count
-unreachable domain cell count
-burned area (m²)
-first arrival (s)
-last arrival (s)
-runtime (s)
+domain_cell_count
+burned_cell_count
+unreachable_domain_cell_count
+burned_area_m2
+first_arrival_s
+last_arrival_s
+runtime_s
 ```
 
-### `outputs/arrival_time.tif`
+### `arrival_time.tif`
 
-- dtype: `float64`;
-- unit: seconds;
-- finite values are first-arrival times;
-- file NoData value: `-1` for cells without finite arrival.
+- `float64` seconds;
+- finite cells contain first-arrival times;
+- file NoData is `-1`.
 
-Arrival times themselves are physically non-negative, so `-1` cannot conflict
-with a valid arrival.
-
-### `outputs/state.tif`
+### `state.tif`
 
 Terminal canonical state:
 
 ```text
-0  UNBURNABLE / outside domain
-1  UNBURNED / in-domain but unreachable
-3  BURNED / eventually reached
+0 UNBURNABLE
+1 UNBURNED / unreachable
+3 BURNED
 ```
 
-It is deliberately a terminal state, not an arbitrary `BURNING` snapshot.
-Programmatic users can generate physical-time snapshots with
-`StaticWildfireSimulationResult.state_at(...)`.
+### `burned_mask.tif`
 
-### `outputs/burned_mask.tif`
+`uint8` final footprint: 0/1.
 
-`uint8` final footprint:
+### `perimeter.geojson`
 
-```text
-0  not eventually burned
-1  eventually burned
+The burned raster footprint is polygonized and transformed to WGS84 before
+GeoJSON serialization.
+
+## 10. Python APIs
+
+### Model-aware file workflow
+
+```python
+from pyfireca import load_run_config, run_config
+
+config = load_run_config("config.yml")
+result, artifacts = run_config(config)
 ```
 
-### `outputs/perimeter.geojson`
-
-The final burned raster footprint is polygonized and transformed from the input
-raster CRS to WGS84 before GeoJSON serialization. The file therefore follows a
-portable longitude/latitude GeoJSON coordinate convention instead of embedding
-projected raster coordinates as if they were RFC-7946 coordinates.
-
-## 8. Python API
-
-The same baseline can be driven without the CLI:
+### Rothermel-specific file workflow
 
 ```python
 from pyfireca import load_static_run_config, run_static_config
-
-config = load_static_run_config("run.yml")
-result, artifacts = run_static_config(config)
-
-print(result.burned_area_m2)
-print(artifacts.outputs.arrival_time)
 ```
 
-For in-memory workflows, use:
+### FBP-specific file workflow
 
 ```python
-from pyfireca import (
-    IgnitionEvent,
-    StaticWildfireSimulationRequest,
-    build_ignition_times,
-    run_static_wildfire_simulation,
-)
+from pyfireca import load_static_fbp_run_config, run_static_fbp_config
 ```
 
-The file/config/CLI layers are thin assembly around the same validated
-simulation objects; they do not implement a second scientific model.
+### In-memory FBP workflow
 
-## 9. What this baseline is for
+```python
+from pyfireca import StaticFBPSimulationRequest, run_static_fbp_simulation
+```
 
-The purpose of this release line is to establish a simple, complete,
-reproducible simulator before introducing new PyFireCA-specific CA methods.
+The model-aware CLI and file workflows remain thin assembly layers. Scientific
+behavior stays in `pyfireca.behavior`; spatial propagation stays in the arrival
+solver.
 
-Research ideas on neighborhood topology, lattice bias, and heterogeneous
-interface coupling are intentionally recorded separately in
-`docs/FUTURE_RESEARCH.md` and are not default simulator behavior.
+## 11. Crown-fire component status
+
+The separate `CruzCrownFireModel` is implemented and tested, but is not yet an
+option in the static file workflow. Connecting it correctly requires an
+explicit canopy/input contract and validated surface-fire intensity coupling.
+
+## 12. Research scope
+
+The current simulator exists to provide a stable base before original CA
+innovation. Neighborhood/lattice/interface research is documented separately in
+`FUTURE_RESEARCH.md` and is not activated by selecting Rothermel or FBP.
