@@ -134,35 +134,46 @@ A transition rule may consume fire-behavior output, local environmental layers, 
 
 Owns wildfire behavior calculations but **not** spatial CA propagation.
 
-A common behavior interface should eventually return a structured result containing quantities such as:
+All behavior implementations return a common `FireBehaviorResult` containing standardized quantities used by CA rules. The current common boundary is:
 
-- spread rate;
-- spread direction;
-- fireline intensity when supported;
-- optional model-specific diagnostics.
+- `spread_rate_m_s` — required, finite and non-negative;
+- `spread_direction_deg` — optional, degrees clockwise from geographic north in `[0, 360)`;
+- `fireline_intensity_w_m` — optional;
+- `flame_length_m` — optional;
+- `diagnostics` — optional model-specific scalar values.
+
+The behavior model input type is intentionally generic. Rothermel- and FBP-style implementations may define different strongly typed input dataclasses rather than being forced into one oversized common input object. Their scientific differences stay visible; interchangeability occurs at the common result boundary.
 
 Initial scientific targets:
 
 1. Rothermel-style surface fire behavior;
 2. FBP-style behavior for Cell2Fire-related experiments.
 
-Implementations should be independently testable against reference calculations.
+Implementations must be independently testable against reference calculations. Detailed unit, direction, and adapter rules are maintained in [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md).
 
 ### 5.6 `data.py`
 
 Owns in-memory environmental layers and time-varying data access.
 
-The design borrows the useful idea behind space-time cubes without copying a Level Set architecture.
+The initial implemented contract is deliberately small:
 
-Expected shapes:
+```text
+SpatialLayer
+EnvironmentalData
+```
+
+A `SpatialLayer` is either:
 
 ```text
 static layer:   (Y, X)
 dynamic layer:  (T, Y, X)
-state:          (Y, X)
 ```
 
-The kernel should work with arrays, not file paths.
+It may carry explicit `units` and `nodata` metadata. `EnvironmentalData` validates a shared spatial shape across all layers and, for the initial index-based contract, a shared time length across dynamic layers.
+
+Static and dynamic layers can be accessed through one snapshot call without creating heavyweight Python `Cell` objects. Physical timestamps/interpolation, xarray/Zarr abstractions, and GIS metadata are intentionally deferred until concrete integrations require them.
+
+The kernel works with arrays, not file paths.
 
 ### 5.7 `gis.py`
 
@@ -380,3 +391,11 @@ Geospatial alignment is validated before simulation; the kernel never silently r
 ### D006 — Development documentation is mandatory
 
 Every meaningful architecture or scientific change must update `DESIGN.md`, `STATUS.md`, and `HANDOFF.md` when affected.
+
+### D007 — Standardize behavior outputs, not model-native inputs
+
+Rothermel, FBP, and future behavior models return the same `FireBehaviorResult`, but each model may keep its own typed input dataclass. This avoids a weak oversized input schema while preserving a stable CA-facing boundary.
+
+### D008 — Minimal array-first environmental data contract
+
+The initial data layer uses `SpatialLayer` and `EnvironmentalData` with `(Y, X)` / `(T, Y, X)` arrays and explicit alignment checks. Physical time coordinates, xarray/Zarr abstractions, and GIS I/O are deferred until a concrete requirement justifies them.
