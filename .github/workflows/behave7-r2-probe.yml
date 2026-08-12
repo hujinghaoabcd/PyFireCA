@@ -106,15 +106,14 @@ jobs:
           grep -q "Total tests passed: 1" behave7_fm1_wind_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_wind_reference.log
 
-      - name: Build explicit wind-limit probe against pinned libbehave
+      - name: Add explicit wind-limit probe as an upstream-CMake target
         shell: bash
         run: |
-          cat > behave_wind_limit_probe.cpp <<'CPP'
+          cat > behave-app/behave-lib/windLimitProbe.cpp <<'CPP'
           #include <iomanip>
           #include <iostream>
           #include "behaveRun.h"
           #include "fuelModels.h"
-          #include "species_master_table.h"
 
           int main()
           {
@@ -155,12 +154,20 @@ jobs:
           }
           CPP
 
-          clang++ -std=c++14 \
-            -Ibehave-app/behave-lib/behave-mirror/src/behave \
-            behave_wind_limit_probe.cpp \
-            behave-build/libbehave.a \
-            -pthread \
-            -o behave_wind_limit_probe
+          cat >> behave-app/behave-lib/CMakeLists.txt <<'CMAKE'
+
+          add_executable(windLimitProbe windLimitProbe.cpp)
+          target_link_libraries(windLimitProbe PRIVATE behave)
+          CMAKE
+
+          cmake \
+            -S behave-app/behave-lib \
+            -B behave-build \
+            -DTEST_BEHAVE=ON \
+            -DBEHAVE_WASM=OFF \
+            -DBEHAVE_JS=OFF \
+            -DBEHAVE_HTML=OFF
+          cmake --build behave-build --target windLimitProbe --parallel 2
 
       - name: Run explicit wind-limit probe
         shell: bash
@@ -170,7 +177,7 @@ jobs:
             echo "behave_core_commit=29888c7ad364aa18cfb340f4c25a8e395f24260f"
             echo "case=FM1 dead moisture 5/5/5%; slope 0%; direct-midflame wind 1000 ft/min; wind limit enabled"
             printf "spread_rate_chains_h="
-            ./behave_wind_limit_probe
+            ./behave-build/windLimitProbe
           } | tee behave_wind_limit_probe.txt
 
       - name: Upload wind-limit probe result
