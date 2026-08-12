@@ -70,15 +70,15 @@ jobs:
           grep -q "Total tests passed: 1" behave7_fm1_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_reference.log
 
-      - name: Probe FM2 static live-fuel reference
+      - name: Verify pinned FM2 static live-fuel reference
         shell: bash
         run: |
-          cat > fm2_zero_wind_zero_slope_probe.csv <<'CSV'
+          cat > fm2_zero_wind_zero_slope.csv <<'CSV'
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
-          2,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,0.0
+          2,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,2.3810521029916596
           CSV
 
-          echo "Probe case: FM2; dead moisture 5/5/5%; live herb 100%; direct-midflame wind 0 ft/min; slope 0%."
-          ./behave-build/testSurface fm2_zero_wind_zero_slope_probe.csv | tee behave7_fm2_probe.log
-          echo "--- FM2 observed official result ---"
-          grep -E "observed value|Total tests" behave7_fm2_probe.log
+          echo "FM2 reference: dead moisture 5/5/5%; live herb 100%; direct-midflame wind 0 ft/min; slope 0%."
+          ./behave-build/testSurface fm2_zero_wind_zero_slope.csv | tee behave7_fm2_reference.log
+          grep -q "Total tests passed: 1" behave7_fm2_reference.log
+          grep -q "Total tests failed: 0" behave7_fm2_reference.log
