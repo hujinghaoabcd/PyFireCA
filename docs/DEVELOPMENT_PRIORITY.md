@@ -1,28 +1,27 @@
 # Development Priority
 
-> Effective: 2026-08-12
+> Effective: 2026-08-13
 >
-> This file overrides older "immediate next research" wording in status/handoff notes when those documents have not yet been refreshed.
+> This file overrides older "immediate next research" wording in historical notes when those documents have not yet been refreshed.
 
 ## Current priority
 
-**Finish the simple baseline wildfire simulator first.**
+**Freeze the simple static baseline wildfire simulator before implementing a new PyFireCA-specific CA method.**
 
-Do not implement a new PyFireCA-specific CA method yet.
-
-The development order is:
+The ordinary simulator workflow is now implemented end to end. The current development order is therefore:
 
 ```text
 1. preserve validated behavior/propagation foundations
-2. complete ordinary simulator features and user workflow
-3. complete GIS/config/CLI/output/reproducibility
-4. freeze and validate the simple simulator baseline
-5. only then reopen the paper-innovation branch
+2. keep all functional/GIS/package CI green
+3. finish package metadata and release documentation
+4. complete the release-readiness audit
+5. choose/freeze the first baseline tag
+6. only then reopen the paper-innovation branch
 ```
 
 ## Innovation ideas
 
-All current innovation ideas are recorded in:
+Current innovation ideas remain recorded in:
 
 ```text
 docs/FUTURE_RESEARCH.md
@@ -30,49 +29,61 @@ docs/FUTURE_RESEARCH.md
 
 They include lattice-bias theory, neighborhood/directional refinement, and heterogeneous interface-coupling questions.
 
-Until the baseline simulator is complete:
+Until the baseline is frozen:
 
-- record new ideas;
-- add evidence or literature notes if useful;
-- do not turn them into default code paths;
-- do not add extended/adaptive neighborhoods as a PyFireCA method;
-- do not optimize an experimental interface rule;
-- keep experimental benchmarks separate from the simulator roadmap.
+- record new ideas rather than implementing them;
+- do not add extended/adaptive neighborhoods as default simulator features;
+- do not change source-cell edge coupling invisibly;
+- do not expose research variants in version-1 YAML/CLI;
+- keep research benchmarks separate from the release-readiness path.
 
-## Simulator completion plan
+## Implemented simulator path
+
+The current baseline already provides:
+
+```text
+YAML + 10 aligned GeoTIFFs + ignition events
+→ strict validation
+→ audited fuel catalogue
+→ Albini-adjusted Rothermel
+→ Behave/Catchpole directional spread
+→ physical earliest arrival
+→ GeoTIFF / WGS84 GeoJSON outputs
+→ resolved config / hashes / metadata / metrics / log
+```
+
+CLI:
+
+```bash
+pyfireca validate config.yml
+pyfireca run config.yml
+```
+
+Current audited catalogue is sufficient for the first baseline:
+
+```text
+Anderson FM1–FM13
+Scott–Burgan GR1 (101)
+```
+
+## Current implementation work
 
 Follow:
 
 ```text
+docs/RELEASE_CHECKLIST.md
 docs/SIMULATOR_ROADMAP.md
 ```
 
-The baseline completion target is an end-to-end deterministic workflow:
+Remaining work is release-readiness rather than new simulation science:
 
 ```text
-config + raster landscape + ignition
-→ validation
-→ Rothermel
-→ directional spread
-→ physical arrival
-→ GIS outputs
-→ reproducible run directory
+clean built-package end-to-end test
+→ package metadata audit
+→ license decision
+→ stale-doc/repository audit
+→ all-green release-candidate commit
+→ baseline tag/freeze
 ```
 
-## Next implementation work
-
-Prefer simulator-completion tasks in this approximate order:
-
-```text
-fuel catalogue coverage
-→ user-facing simulation request/API
-→ ignition workflow
-→ stable result object
-→ raster/vector outputs
-→ config + CLI
-→ reproducible run directory
-→ end-to-end examples
-→ baseline validation/release
-```
-
-Static north-up square metric rasters are sufficient for the first complete simulator. Do not let rotated-grid support, dynamic WRF coupling, crown fire, spotting, suppression, Monte Carlo, or performance optimization delay the first clean baseline.
+Static north-up square metric rasters are sufficient for this first release. Do not let full Scott–Burgan coverage, rotated grids, dynamic WRF coupling, crown fire, spotting, suppression, Monte Carlo, FBP, or performance optimization delay the baseline freeze.
