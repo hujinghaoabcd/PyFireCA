@@ -1,9 +1,6 @@
-from pathlib import Path
-
 import pytest
 
 from pyfireca.config import load_static_run_config
-
 
 INPUT_NAMES = (
     "fuel_model",
@@ -44,7 +41,7 @@ def _yaml(*, extra_root: str = "", omit_input: str | None = None) -> str:
     )
 
 
-def test_load_static_run_config_resolves_paths_relative_to_config(tmp_path: Path) -> None:
+def test_load_static_run_config_resolves_paths_relative_to_config(tmp_path) -> None:
     path = tmp_path / "configs" / "run.yml"
     path.parent.mkdir()
     path.write_text(_yaml(), encoding="utf-8")
@@ -64,7 +61,7 @@ def test_load_static_run_config_resolves_paths_relative_to_config(tmp_path: Path
     assert resolved["inputs"]["fuel_model"] == str(config.inputs.fuel_model)
 
 
-def test_config_rejects_missing_input_layer(tmp_path: Path) -> None:
+def test_config_rejects_missing_input_layer(tmp_path) -> None:
     path = tmp_path / "run.yml"
     path.write_text(_yaml(omit_input="aspect"), encoding="utf-8")
 
@@ -72,7 +69,7 @@ def test_config_rejects_missing_input_layer(tmp_path: Path) -> None:
         load_static_run_config(path)
 
 
-def test_config_rejects_unknown_root_key(tmp_path: Path) -> None:
+def test_config_rejects_unknown_root_key(tmp_path) -> None:
     path = tmp_path / "run.yml"
     path.write_text(_yaml(extra_root="mystery: true"), encoding="utf-8")
 
@@ -80,7 +77,7 @@ def test_config_rejects_unknown_root_key(tmp_path: Path) -> None:
         load_static_run_config(path)
 
 
-def test_config_rejects_empty_ignition_list(tmp_path: Path) -> None:
+def test_config_rejects_empty_ignition_list(tmp_path) -> None:
     text = _yaml().replace(
         "ignitions:\n  - row: 10\n    col: 20\n  - row: 12\n    col: 21\n    time_s: 300",
         "ignitions: []",
