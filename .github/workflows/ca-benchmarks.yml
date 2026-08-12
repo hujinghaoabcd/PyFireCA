@@ -2,6 +2,9 @@ name: CA Benchmarks
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/ca-benchmarks.yml"
 
 permissions:
   contents: read
