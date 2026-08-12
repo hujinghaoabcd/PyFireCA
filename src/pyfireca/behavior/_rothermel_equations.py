@@ -78,10 +78,7 @@ def compute_moisture_damping(
 
     relative_moisture = moisture_fraction / moisture_of_extinction_fraction
     return (
-        1.0
-        - 2.59 * relative_moisture
-        + 5.11 * relative_moisture**2
-        - 3.52 * relative_moisture**3
+        1.0 - 2.59 * relative_moisture + 5.11 * relative_moisture**2 - 3.52 * relative_moisture**3
     )
 
 
