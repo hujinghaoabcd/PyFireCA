@@ -7,6 +7,7 @@ from pyfireca.behavior._units import (
     FT_MIN_TO_M_S,
     LB_FT2_TO_KG_M2,
     LB_FT3_TO_KG_M3,
+    MPH_TO_M_S,
     btu_ft2_min_to_w_m2,
     btu_lb_to_j_kg,
     feet_to_metres,
@@ -19,7 +20,9 @@ from pyfireca.behavior._units import (
     lb_ft3_to_kg_m3,
     m_inv_to_ft_inv,
     m_s_to_ft_min,
+    m_s_to_mph,
     metres_to_feet,
+    mph_to_m_s,
     w_m2_to_btu_ft2_min,
 )
 
@@ -30,6 +33,12 @@ def test_exact_length_and_spread_rate_conversions() -> None:
     assert pytest.approx(0.00508) == FT_MIN_TO_M_S
     assert ft_min_to_m_s(1.0) == pytest.approx(0.00508)
     assert m_s_to_ft_min(0.00508) == pytest.approx(1.0)
+
+
+def test_exact_miles_per_hour_conversion_round_trip() -> None:
+    assert MPH_TO_M_S == pytest.approx(0.44704)
+    assert mph_to_m_s(1.0) == pytest.approx(0.44704)
+    assert m_s_to_mph(0.44704) == pytest.approx(1.0)
 
 
 def test_fuel_load_conversion_round_trip() -> None:
@@ -70,3 +79,4 @@ def test_conversion_helpers_preserve_zero() -> None:
     assert btu_lb_to_j_kg(0.0) == 0.0
     assert btu_ft2_min_to_w_m2(0.0) == 0.0
     assert ft_min_to_m_s(0.0) == 0.0
+    assert mph_to_m_s(0.0) == 0.0
