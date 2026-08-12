@@ -195,9 +195,7 @@ class CruzCrownFireModel:
             inputs.canopy_bulk_density_kg_m3,
             inputs.fine_fuel_moisture_fraction,
         )
-        critical_ros = van_wagner_critical_crown_ros_m_min(
-            inputs.canopy_bulk_density_kg_m3
-        )
+        critical_ros = van_wagner_critical_crown_ros_m_min(inputs.canopy_bulk_density_kg_m3)
         if active_ros > critical_ros:
             fire_type = CrownFireType.ACTIVE
             crown_ros = active_ros

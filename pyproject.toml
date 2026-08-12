@@ -87,3 +87,4 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.format]
 docstring-code-format = true
+exclude = ["src/pyfireca/behavior/fbp.py"]

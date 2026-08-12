@@ -135,21 +135,15 @@ def test_non_crowning_fuels_do_not_create_artificial_crown_fire():
 
 
 def test_fbp_generic_result_converts_native_units():
-    full = FBPModel().compute_full(
-        FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182)
-    )
-    generic = FBPModel().compute(
-        FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182)
-    )
+    full = FBPModel().compute_full(FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182))
+    generic = FBPModel().compute(FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182))
     assert generic.spread_rate_m_s == pytest.approx(full.head_ros_m_min / 60.0)
     assert generic.fireline_intensity_w_m == pytest.approx(full.head_fire_intensity_kw_m * 1000.0)
     assert generic.diagnostics["back_ros_m_min"] == pytest.approx(full.back_ros_m_min)
 
 
 def test_fbp_ellipse_preserves_head_and_back_rates():
-    result = FBPModel().compute_full(
-        FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182)
-    )
+    result = FBPModel().compute_full(FBPInputs("C1", 90, 130, 20, 0, 15, 270, 55, -110, 0, 182))
     ellipse = FBPEllipse.from_computation(result)
     assert ellipse.directional_ros_m_min(result.spread_direction_deg) == pytest.approx(
         result.head_ros_m_min
