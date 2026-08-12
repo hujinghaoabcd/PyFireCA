@@ -59,11 +59,9 @@ def combine_wind_slope_effects(
     y = wind_rate * sin(theta)
     additional_rate = hypot(x, y)
 
-    if additional_rate == 0.0:
-        direction = 0.0
-    else:
-        direction = degrees(atan2(y, x)) % 360.0
-
+    direction = (
+        0.0 if additional_rate == 0.0 else degrees(atan2(y, x)) % 360.0
+    )
     effective_factor = (
         additional_rate / base_spread_rate_m_s if base_spread_rate_m_s > 0.0 else 0.0
     )
