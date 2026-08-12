@@ -143,7 +143,11 @@ class StaticWildfireSimulationResult:
 
         if not isfinite(time_s) or time_s < 0.0:
             raise ValueError("time_s must be finite and non-negative")
-        return self.domain_mask & np.isfinite(self.arrival_times_s) & (self.arrival_times_s <= time_s)
+        return (
+            self.domain_mask
+            & np.isfinite(self.arrival_times_s)
+            & (self.arrival_times_s <= time_s)
+        )
 
     def summary_metrics(self) -> dict[str, int | float]:
         """Return stable baseline summary statistics for reporting/output."""
