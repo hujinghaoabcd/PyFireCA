@@ -47,7 +47,8 @@ class RasterGrid:
         validate_state_array(state)
         if state.shape != self.state.shape:
             raise ValueError(
-                f"replacement state shape {state.shape} does not match grid shape {self.state.shape}"
+                "replacement state shape "
+                f"{state.shape} does not match grid shape {self.state.shape}"
             )
         self.state = state
 
