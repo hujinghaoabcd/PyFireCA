@@ -124,9 +124,7 @@ def test_required_snapshot_returns_only_selected_complete_layers() -> None:
 def test_required_snapshot_rejects_declared_dynamic_nodata() -> None:
     wind_values = np.ones((3, 2, 3), dtype=float)
     wind_values[1, 0, 2] = -9999.0
-    data = EnvironmentalData(
-        {"wind": SpatialLayer(wind_values, units="m/s", nodata=-9999.0)}
-    )
+    data = EnvironmentalData({"wind": SpatialLayer(wind_values, units="m/s", nodata=-9999.0)})
 
     with pytest.raises(MissingEnvironmentalDataError, match="1 declared NoData"):
         data.require_complete_snapshot(["wind"], time_index=1)
