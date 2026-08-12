@@ -35,9 +35,7 @@ def test_half_cell_interface_matches_sum_of_two_half_segment_travel_times() -> N
     equivalent_rate = provider.spread_rate_m_s(0, 0, (0, 1))
 
     via_equivalent_rate = cell_size_m / equivalent_rate
-    via_two_half_segments = (cell_size_m / 2.0) / source_rate + (
-        cell_size_m / 2.0
-    ) / target_rate
+    via_two_half_segments = (cell_size_m / 2.0) / source_rate + (cell_size_m / 2.0) / target_rate
 
     assert via_equivalent_rate == pytest.approx(via_two_half_segments)
 
