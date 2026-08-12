@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pyfireca.behavior._rothermel_dynamic import apply_dynamic_herbaceous_transfer
 from pyfireca.behavior._rothermel_equations import (
     compute_heat_sink_j_m3,
     compute_live_moisture_of_extinction,
@@ -29,7 +30,7 @@ from pyfireca.behavior.rothermel import (
 
 @dataclass(frozen=True, slots=True)
 class BaseSpreadResult:
-    """Validated R2 quantities needed by later Rothermel wind/slope stages."""
+    """Validated base quantities needed by later Rothermel wind/slope stages."""
 
     spread_rate_m_s: float
     reaction_intensity_w_m2: float
@@ -39,6 +40,8 @@ class BaseSpreadResult:
     relative_packing_ratio: float
     propagating_flux: float
     heat_sink_j_m3: float
+    dynamic_herbaceous_transfer_fraction: float = 0.0
+    dynamic_herbaceous_transferred_load_kg_m2: float = 0.0
 
 
 def _weighted(values: tuple[float, ...], weights: tuple[float, ...]) -> float:
@@ -49,11 +52,11 @@ def compute_base_spread_result(
     fuel: RothermelFuelModel,
     moisture: RothermelFuelMoisture,
 ) -> BaseSpreadResult:
-    """Return validated static no-wind/no-slope Rothermel quantities.
+    """Return prepared no-wind/no-slope Rothermel quantities.
 
-    This assembler deliberately excludes wind, slope, dynamic herbaceous load
-    transfer, crown fire, and spotting. It combines the independently tested R1
-    heterogeneous-fuel quantities with the formula-level R2 equations.
+    Dynamic herbaceous fuel models are first resolved into the same six-class
+    static representation used by the validated R1/R2 chain. Wind, slope,
+    crown fire, and spotting remain outside this assembler.
     """
 
     if not isinstance(fuel, RothermelFuelModel):
@@ -62,10 +65,9 @@ def compute_base_spread_result(
         raise TypeError("moisture must be RothermelFuelMoisture")
     if not fuel.burnable:
         return BaseSpreadResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    if fuel.dynamic:
-        raise NotImplementedError(
-            "dynamic herbaceous load transfer must be applied before base Rothermel calculation"
-        )
+
+    dynamic_transfer = apply_dynamic_herbaceous_transfer(fuel, moisture)
+    fuel = dynamic_transfer.fuel
 
     within, categories = compute_surface_area_weights(fuel)
     characteristic_sav = compute_characteristic_sav_m_inv(fuel)
@@ -81,6 +83,8 @@ def compute_base_spread_result(
             0.0,
             0.0,
             0.0,
+            dynamic_herbaceous_transfer_fraction=dynamic_transfer.transfer_fraction,
+            dynamic_herbaceous_transferred_load_kg_m2=dynamic_transfer.transferred_load_kg_m2,
         )
 
     relative_packing_ratio = packing_ratio / optimum_packing_ratio
@@ -201,6 +205,8 @@ def compute_base_spread_result(
         relative_packing_ratio=relative_packing_ratio,
         propagating_flux=propagating_flux,
         heat_sink_j_m3=heat_sink,
+        dynamic_herbaceous_transfer_fraction=dynamic_transfer.transfer_fraction,
+        dynamic_herbaceous_transferred_load_kg_m2=dynamic_transfer.transferred_load_kg_m2,
     )
 
 
