@@ -23,7 +23,7 @@ from pyfireca.behavior.rothermel import RothermelInputs
 
 @dataclass(frozen=True, slots=True)
 class RothermelModel:
-    """Compute validated static-fuel Rothermel surface spread behavior.
+    """Compute validated static/dynamic-fuel Rothermel surface spread behavior.
 
     Parameters
     ----------
@@ -34,6 +34,9 @@ class RothermelModel:
 
     Notes
     -----
+    Dynamic herbaceous fuels are resolved from live to dead herbaceous load for
+    the supplied moisture snapshot before the common R1/R2 chain is evaluated.
+
     The current public model returns validated spread rate and direction only.
     Reaction intensity is exposed as a diagnostic because it is needed by the
     optional wind-limit path, but fireline intensity and flame length remain
@@ -63,6 +66,12 @@ class RothermelModel:
                     "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                     "packing_ratio": base.packing_ratio,
                     "relative_packing_ratio": base.relative_packing_ratio,
+                    "dynamic_herbaceous_transfer_fraction": (
+                        base.dynamic_herbaceous_transfer_fraction
+                    ),
+                    "dynamic_herbaceous_transferred_load_kg_m2": (
+                        base.dynamic_herbaceous_transferred_load_kg_m2
+                    ),
                     "wind_factor": 0.0,
                     "slope_factor": 0.0,
                     "effective_factor": 0.0,
@@ -125,6 +134,12 @@ class RothermelModel:
                 "characteristic_sav_m_inv": base.characteristic_sav_m_inv,
                 "packing_ratio": base.packing_ratio,
                 "relative_packing_ratio": base.relative_packing_ratio,
+                "dynamic_herbaceous_transfer_fraction": (
+                    base.dynamic_herbaceous_transfer_fraction
+                ),
+                "dynamic_herbaceous_transferred_load_kg_m2": (
+                    base.dynamic_herbaceous_transferred_load_kg_m2
+                ),
                 "wind_factor": wind_factor,
                 "slope_factor": slope_factor,
                 "effective_factor": combined.effective_factor,
