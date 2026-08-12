@@ -2,18 +2,31 @@ import pytest
 
 from pyfireca.behavior._rothermel_equations import (
     compute_combustible_load,
+    compute_effective_heating_number,
+    compute_heat_of_preignition_j_kg,
+    compute_heat_sink_j_m3,
     compute_maximum_reaction_velocity_per_min,
     compute_mineral_damping,
     compute_moisture_damping,
+    compute_no_wind_no_slope_spread_rate_m_s,
+    compute_preignition_heat_term_j_kg,
+    compute_propagating_flux,
+    compute_reaction_intensity_w_m2,
     compute_reaction_velocity_exponent,
     compute_reaction_velocity_per_min,
 )
-from pyfireca.behavior._units import ft_inv_to_m_inv, lb_ft2_to_kg_m2
+from pyfireca.behavior._units import (
+    btu_lb_to_j_kg,
+    ft_inv_to_m_inv,
+    lb_ft2_to_kg_m2,
+    lb_ft3_to_kg_m3,
+)
 
 FM1_SIGMA_M_INV = ft_inv_to_m_inv(3500.0)
 FM1_PACKING_RATIO = 0.034 / (1.0 * 32.0)
 FM1_OPTIMUM_PACKING_RATIO = 3.348 / 3500.0**0.8189
 FM1_RELATIVE_PACKING_RATIO = FM1_PACKING_RATIO / FM1_OPTIMUM_PACKING_RATIO
+FM1_BEHAVE7_BASE_ROS_M_S = 0.024733996158492002
 
 
 def test_fm1_combustible_load_matches_albini_adjustment() -> None:
@@ -63,12 +76,67 @@ def test_fm1_maximum_and_actual_reaction_velocity() -> None:
     ) == pytest.approx(14.201359906473266, rel=1e-14)
 
 
+def test_fm1_reaction_intensity_and_heat_transfer_intermediates() -> None:
+    gamma = compute_reaction_velocity_per_min(FM1_SIGMA_M_INV, FM1_RELATIVE_PACKING_RATIO)
+    net_load = compute_combustible_load(lb_ft2_to_kg_m2(0.034), 0.0555)
+    eta_m = compute_moisture_damping(0.05, 0.12)
+    eta_s = compute_mineral_damping(0.01)
+
+    reaction_intensity = compute_reaction_intensity_w_m2(
+        gamma,
+        net_load,
+        btu_lb_to_j_kg(8000.0),
+        eta_m,
+        eta_s,
+    )
+    propagating_flux = compute_propagating_flux(FM1_SIGMA_M_INV, FM1_PACKING_RATIO)
+    heat_of_preignition = compute_heat_of_preignition_j_kg(0.05)
+    effective_heating = compute_effective_heating_number(FM1_SIGMA_M_INV)
+    heat_sink = compute_heat_sink_j_m3(
+        lb_ft3_to_kg_m3(0.034),
+        compute_preignition_heat_term_j_kg(0.05, FM1_SIGMA_M_INV),
+    )
+
+    assert reaction_intensity == pytest.approx(159495.8270605292, rel=1e-13)
+    assert propagating_flux == pytest.approx(0.0577521709187699, rel=1e-14)
+    assert heat_of_preignition == pytest.approx(711290.8, rel=1e-14)
+    assert effective_heating == pytest.approx(0.9613386185824466, rel=1e-14)
+    assert heat_sink == pytest.approx(372411.72862670355, rel=1e-13)
+
+
+def test_fm1_dead_only_base_ros_matches_pinned_behave7_reference() -> None:
+    gamma = compute_reaction_velocity_per_min(FM1_SIGMA_M_INV, FM1_RELATIVE_PACKING_RATIO)
+    reaction_intensity = compute_reaction_intensity_w_m2(
+        gamma,
+        compute_combustible_load(lb_ft2_to_kg_m2(0.034), 0.0555),
+        btu_lb_to_j_kg(8000.0),
+        compute_moisture_damping(0.05, 0.12),
+        compute_mineral_damping(0.01),
+    )
+    heat_sink = compute_heat_sink_j_m3(
+        lb_ft3_to_kg_m3(0.034),
+        compute_preignition_heat_term_j_kg(0.05, FM1_SIGMA_M_INV),
+    )
+
+    observed = compute_no_wind_no_slope_spread_rate_m_s(
+        reaction_intensity,
+        compute_propagating_flux(FM1_SIGMA_M_INV, FM1_PACKING_RATIO),
+        heat_sink,
+    )
+
+    assert observed == pytest.approx(FM1_BEHAVE7_BASE_ROS_M_S, rel=1e-13)
+
+
 def test_r2_equations_define_zero_and_invalid_boundaries() -> None:
     assert compute_combustible_load(0.0, 0.0555) == 0.0
     assert compute_mineral_damping(0.0) == 0.0
     assert compute_reaction_velocity_exponent(0.0) == 0.0
     assert compute_maximum_reaction_velocity_per_min(0.0) == 0.0
     assert compute_reaction_velocity_per_min(FM1_SIGMA_M_INV, 0.0) == 0.0
+    assert compute_propagating_flux(0.0, FM1_PACKING_RATIO) == 0.0
+    assert compute_effective_heating_number(0.0) == 0.0
+    assert compute_heat_sink_j_m3(0.0, 1.0) == 0.0
+    assert compute_no_wind_no_slope_spread_rate_m_s(1.0, 1.0, 0.0) == 0.0
 
     with pytest.raises(ValueError):
         compute_combustible_load(-1.0, 0.0555)
@@ -82,3 +150,9 @@ def test_r2_equations_define_zero_and_invalid_boundaries() -> None:
         compute_reaction_velocity_exponent(-1.0)
     with pytest.raises(ValueError):
         compute_reaction_velocity_per_min(FM1_SIGMA_M_INV, -0.1)
+    with pytest.raises(ValueError):
+        compute_propagating_flux(FM1_SIGMA_M_INV, -0.1)
+    with pytest.raises(ValueError):
+        compute_heat_of_preignition_j_kg(-0.1)
+    with pytest.raises(ValueError):
+        compute_heat_sink_j_m3(-1.0, 1.0)
