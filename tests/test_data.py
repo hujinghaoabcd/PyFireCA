@@ -4,6 +4,7 @@ import pytest
 from pyfireca.data import (
     EnvironmentalData,
     LandscapeInput,
+    MissingEnvironmentalDataError,
     SpatialLayer,
     build_domain_mask,
     nodata_mask,
@@ -106,6 +107,60 @@ def test_environmental_data_reports_missing_layer() -> None:
 
     with pytest.raises(KeyError, match="fuel"):
         data.layer("wind_speed")
+
+
+def test_required_snapshot_returns_only_selected_complete_layers() -> None:
+    fuel = SpatialLayer(np.ones((2, 3), dtype=np.int16), nodata=0)
+    wind = SpatialLayer(np.arange(24, dtype=float).reshape(4, 2, 3), units="m/s")
+    optional = SpatialLayer(np.full((4, 2, 3), np.nan), units="fraction")
+    data = EnvironmentalData({"fuel": fuel, "wind": wind, "optional": optional})
+
+    snapshot = data.require_complete_snapshot(["fuel", "wind"], time_index=2)
+
+    assert set(snapshot) == {"fuel", "wind"}
+    assert np.array_equal(snapshot["wind"], wind.values[2])
+
+
+def test_required_snapshot_rejects_declared_dynamic_nodata() -> None:
+    wind_values = np.ones((3, 2, 3), dtype=float)
+    wind_values[1, 0, 2] = -9999.0
+    data = EnvironmentalData(
+        {"wind": SpatialLayer(wind_values, units="m/s", nodata=-9999.0)}
+    )
+
+    with pytest.raises(MissingEnvironmentalDataError, match="1 declared NoData"):
+        data.require_complete_snapshot(["wind"], time_index=1)
+
+
+def test_required_snapshot_rejects_unmarked_nonfinite_values_without_reclassifying_domain() -> None:
+    wind_values = np.ones((2, 2, 3), dtype=float)
+    wind_values[0, 1, 1] = np.nan
+    data = EnvironmentalData({"wind": SpatialLayer(wind_values, units="m/s", nodata=None)})
+
+    assert not nodata_mask(data.layer("wind"), time_index=0).any()
+    with pytest.raises(MissingEnvironmentalDataError, match="additional non-finite"):
+        data.require_complete_snapshot(["wind"], time_index=0)
+
+
+def test_required_snapshot_does_not_interpolate_or_skip_missing_time() -> None:
+    wind_values = np.ones((3, 2, 3), dtype=float)
+    wind_values[1, 0, 0] = np.nan
+    data = EnvironmentalData({"wind": SpatialLayer(wind_values, units="m/s")})
+
+    with pytest.raises(MissingEnvironmentalDataError, match="time_index=1"):
+        data.require_complete_snapshot(["wind"], time_index=1)
+
+    valid = data.require_complete_snapshot(["wind"], time_index=2)
+    assert np.array_equal(valid["wind"], wind_values[2])
+
+
+def test_required_snapshot_validates_requested_names() -> None:
+    data = EnvironmentalData({"fuel": SpatialLayer(np.ones((2, 2)))})
+
+    with pytest.raises(ValueError, match="at least one"):
+        data.require_complete_snapshot([])
+    with pytest.raises(ValueError, match="unique"):
+        data.require_complete_snapshot(["fuel", "fuel"])
 
 
 def test_nodata_mask_uses_only_explicit_marker() -> None:
