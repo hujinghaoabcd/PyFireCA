@@ -252,9 +252,7 @@ def compute_surface_area_weights(
             surface_areas.append(0.0)
             continue
         surface_areas.append(
-            fuel.sav_ratio_m_inv[index]
-            * load
-            / fuel.particle_density_kg_m3[index]
+            fuel.sav_ratio_m_inv[index] * load / fuel.particle_density_kg_m3[index]
         )
 
     dead_area = sum(surface_areas[:4])
@@ -280,12 +278,8 @@ def compute_characteristic_sav_m_inv(fuel: RothermelFuelModel) -> float:
     """Return the surface-area-weighted characteristic SAV ratio in 1/m."""
 
     within, categories = compute_surface_area_weights(fuel)
-    dead_sav = sum(
-        within[index] * fuel.sav_ratio_m_inv[index] for index in range(4)
-    )
-    live_sav = sum(
-        within[index] * fuel.sav_ratio_m_inv[index] for index in range(4, 6)
-    )
+    dead_sav = sum(within[index] * fuel.sav_ratio_m_inv[index] for index in range(4))
+    live_sav = sum(within[index] * fuel.sav_ratio_m_inv[index] for index in range(4, 6))
     return categories[0] * dead_sav + categories[1] * live_sav
 
 
