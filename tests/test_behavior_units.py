@@ -1,11 +1,13 @@
 import pytest
 
 from pyfireca.behavior._units import (
+    BTU_FT2_MIN_TO_W_M2,
     BTU_LB_TO_J_KG,
     FT_INV_TO_M_INV,
     FT_MIN_TO_M_S,
     LB_FT2_TO_KG_M2,
     LB_FT3_TO_KG_M3,
+    btu_ft2_min_to_w_m2,
     btu_lb_to_j_kg,
     feet_to_metres,
     ft_inv_to_m_inv,
@@ -18,6 +20,7 @@ from pyfireca.behavior._units import (
     m_inv_to_ft_inv,
     m_s_to_ft_min,
     metres_to_feet,
+    w_m2_to_btu_ft2_min,
 )
 
 
@@ -53,10 +56,17 @@ def test_heat_content_conversion_round_trip() -> None:
     assert j_kg_to_btu_lb(BTU_LB_TO_J_KG) == pytest.approx(1.0)
 
 
+def test_reaction_intensity_conversion_round_trip() -> None:
+    assert BTU_FT2_MIN_TO_W_M2 == pytest.approx(189.2754447037829, rel=1e-14)
+    assert btu_ft2_min_to_w_m2(1.0) == pytest.approx(BTU_FT2_MIN_TO_W_M2)
+    assert w_m2_to_btu_ft2_min(BTU_FT2_MIN_TO_W_M2) == pytest.approx(1.0)
+
+
 def test_conversion_helpers_preserve_zero() -> None:
     assert feet_to_metres(0.0) == 0.0
     assert lb_ft2_to_kg_m2(0.0) == 0.0
     assert lb_ft3_to_kg_m3(0.0) == 0.0
     assert ft_inv_to_m_inv(0.0) == 0.0
     assert btu_lb_to_j_kg(0.0) == 0.0
+    assert btu_ft2_min_to_w_m2(0.0) == 0.0
     assert ft_min_to_m_s(0.0) == 0.0
