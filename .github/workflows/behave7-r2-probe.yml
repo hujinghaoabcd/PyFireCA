@@ -1,4 +1,4 @@
-name: Behave 7 R2 reference probe
+name: Behave 7 R2 reference regression
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
           path: behave-app/behave-lib/behave-mirror
           persist-credentials: false
 
-      - name: Increase probe output precision only
+      - name: Increase regression output precision only
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -40,7 +40,7 @@ jobs:
           needle = "int main(int argc, char * argv[])\n{\n"
           replacement = needle + "  std::cout << std::setprecision(17);\n"
           if needle not in source:
-              raise SystemExit("Could not locate testSurface main() for precision-only probe patch")
+              raise SystemExit("Could not locate testSurface main() for precision-only patch")
           path.write_text(source.replace(needle, replacement, 1))
           PY
 
@@ -55,18 +55,20 @@ jobs:
             -DBEHAVE_HTML=OFF
           cmake --build behave-build --target testSurface --parallel 2
 
-      - name: Run zero-wind zero-slope reference case
+      - name: Verify pinned zero-wind zero-slope reference
         shell: bash
         run: |
           cat > zero_wind_zero_slope.csv <<'CSV'
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
-          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,-1.0
+          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,4.4262698923571939
           CSV
 
           echo "Pinned Behave app commit: a3cfcd5903188d73445948af16644868225bb9d5"
           echo "Pinned behave core commit: 29888c7ad364aa18cfb340f4c25a8e395f24260f"
-          echo "Only the test harness stream precision is patched; Behave equation/core sources are unchanged."
-          echo "Probe case: fuel model 1; 5/5/5% dead moisture; 100/100% live moisture; direct-midflame wind 0 ft/min; slope 0%; aspect 0; no canopy."
-          ./behave-build/testSurface zero_wind_zero_slope.csv | tee behave7_r2_probe.log
-          echo "--- Parsed official result line ---"
-          grep -E "observed value|Test fire spread rate|failed|passed" behave7_r2_probe.log || true
+          echo "Only test-harness stream precision is patched; Behave equation/core sources are unchanged."
+          echo "Reference case: FM1; dead moisture 5/5/5%; direct-midflame wind 0 ft/min; slope 0%."
+
+          ./behave-build/testSurface zero_wind_zero_slope.csv | tee behave7_r2_reference.log
+
+          grep -q "Total tests passed: 1" behave7_r2_reference.log
+          grep -q "Total tests failed: 0" behave7_r2_reference.log
