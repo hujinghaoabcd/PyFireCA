@@ -35,8 +35,10 @@ Do not casually reverse these decisions without updating `docs/DESIGN.md` and ex
 6. Numba is introduced only after profiling.
 7. Fire behavior and CA propagation remain separate.
 8. GIS file I/O remains outside numerical kernels.
-9. The package tree stays compact until code size/extension pressure justifies splitting files into subpackages.
+9. The package tree stays compact until real extension pressure justifies splitting files.
 10. Development design/status/handoff/validation documents are maintained continuously.
+11. Behavior-model outputs are standardized, but Rothermel/FBP native inputs are **not** forced into one oversized common input type.
+12. Physical weather time interpolation is deferred until a real weather-source integration is implemented.
 
 ## 3. Reference-project lessons already accepted
 
@@ -117,7 +119,11 @@ src/pyfireca/
 ├── grid.py
 ├── neighborhood.py
 ├── rules.py
-└── simulation.py
+├── simulation.py
+├── data.py
+└── behavior/
+    ├── __init__.py
+    └── base.py
 ```
 
 Current examples/tests:
@@ -127,6 +133,8 @@ examples/
 └── minimal.py
 
 tests/
+├── test_behavior_base.py
+├── test_data.py
 ├── test_grid.py
 ├── test_neighborhood.py
 ├── test_rules.py
@@ -134,13 +142,11 @@ tests/
 └── test_state.py
 ```
 
-Planned files such as `data.py`, `gis.py`, `config.py`, `metrics.py`, and `behavior/` should be added only when their milestone starts. Do not create empty placeholder modules merely to match a diagram.
+Files such as `gis.py`, `config.py`, `metrics.py`, `behavior/rothermel.py`, `behavior/fbp.py`, and fuel modules should be added only when their milestone starts. Do not create empty placeholders simply to match a diagram.
 
 ## 5. Current CA behavior
 
 ### `FireState`
-
-Implemented state set:
 
 ```text
 UNBURNABLE = 0
@@ -161,7 +167,7 @@ Implemented:
 - safe state replacement with shape checking;
 - independent copy.
 
-No CRS/transform metadata yet. Those belong to the upcoming GIS/data contract.
+No CRS/transform metadata yet.
 
 ### Neighborhoods
 
@@ -184,11 +190,9 @@ next_state(grid, *, rng) -> array
 
 The rule reads the current grid and returns a complete next-state array. `Simulation` applies it only after computation finishes.
 
-This means newly updated cells do not influence other cells within the same step unless a future scheduler explicitly changes that policy.
-
 ### `NeighborIgnitionRule`
 
-Implemented as the first transparent wildfire CA reference rule:
+Architectural baseline only:
 
 ```text
 BURNING cell
@@ -198,7 +202,7 @@ becomes BURNED next step
 currently UNBURNED neighbors become BURNING
 ```
 
-It contains **no Rothermel/FBP physics**. This is intentional. It is a baseline for validating CA semantics and neighborhood substitution.
+It intentionally contains no Rothermel/FBP physics.
 
 ### `Simulation`
 
@@ -208,30 +212,119 @@ Implemented:
 - explicit `numpy.random.Generator`;
 - `step()`;
 - `run(steps)`;
-- shape/state validation of rule output;
+- output shape/state validation;
 - explicit synchronous replacement semantics.
 
-## 6. Test / CI state
+## 6. Current fire-behavior contract
 
-The GitHub Actions workflow contains:
+Implemented in `src/pyfireca/behavior/base.py`.
+
+### `FireBehaviorResult`
+
+Common CA-facing fields:
+
+```text
+spread_rate_m_s           required
+spread_direction_deg      optional
+fireline_intensity_w_m    optional
+flame_length_m             optional
+diagnostics                optional model-specific scalar mapping
+```
+
+Conventions:
+
+- spread rate: metres per second;
+- fireline intensity: watts per metre;
+- flame length: metres;
+- direction: degrees clockwise from geographic north;
+- direction must satisfy `[0, 360)`;
+- invalid/non-finite common values raise errors rather than being silently repaired.
+
+### `FireBehaviorModel[InputT]`
+
+The protocol is generic in the input type:
+
+```python
+compute(inputs: InputT) -> FireBehaviorResult
+```
+
+This is deliberate. A future `RothermelInputs` and `FBPInputs` may differ. The stable interchange boundary is the **result**, not a giant all-model input object.
+
+Detailed contract: `docs/BEHAVIOR_DATA_CONTRACT.md`.
+
+## 7. Current environmental data contract
+
+Implemented in `src/pyfireca/data.py`.
+
+### `SpatialLayer`
+
+Supports:
+
+```text
+static   (Y, X)
+dynamic  (T, Y, X)
+```
+
+Metadata:
+
+```text
+units
+nodata
+```
+
+`at(time_index)` provides one `(Y, X)` view. Static layers ignore the requested index; dynamic layers require a valid integer index.
+
+### `EnvironmentalData`
+
+A named collection of `SpatialLayer` objects.
+
+Current invariants:
+
+- at least one layer;
+- non-empty layer names;
+- every layer has the same spatial shape;
+- every dynamic layer has the same time length;
+- `snapshot(t)` returns aligned `(Y, X)` arrays.
+
+Important limitations:
+
+- time is currently integer-index based;
+- no datetime coordinate/interpolation;
+- no CRS/transform metadata here;
+- `nodata` is metadata only;
+- no automatic masking/imputation;
+- no xarray/Zarr abstraction yet.
+
+## 8. Test / CI state
+
+GitHub Actions includes:
 
 - Ruff lint;
 - Ruff format check;
 - pytest + coverage in the quality job;
 - pytest matrix for Python 3.11, 3.12, 3.13.
 
-During bootstrap CI correctly found two style problems:
+Milestone C added tests for:
 
-1. one 101-character line in `grid.py`;
-2. one Ruff-format mismatch in `tests/test_rules.py`.
+- valid/invalid common behavior results;
+- model-specific behavior input compatibility;
+- static/dynamic layer indexing;
+- invalid data dimensions/dtypes;
+- spatial alignment;
+- dynamic time-length alignment;
+- missing layer errors;
+- mixed static/dynamic snapshots.
 
-Both were corrected.
+CI initially caught only style/format issues in the new files. These were fixed. At the final check in this session:
 
-The Python 3.11/3.12/3.13 test jobs have been passing. An English-README-era run completed fully green after the style fixes; later documentation-only commits continue to trigger the same CI.
+- quality job: success;
+- Python 3.12: success;
+- Python 3.13: success;
+- Python 3.11 test step: success, workflow cleanup still finishing.
 
-If the next session begins with a red CI badge, inspect the newest run before changing scientific code.
+If the next session starts with a red badge, inspect the newest run first; do not change scientific code based on an old failed formatting run.
 
-## 7. Engineering files already present
+## 9. Engineering / documentation files
 
 ```text
 .github/workflows/ci.yml
@@ -243,39 +336,24 @@ CHANGELOG.md
 CONTRIBUTING.md
 README.md
 README.zh-CN.md
-```
 
-`pyproject.toml` currently uses:
-
-- Python `>=3.11`;
-- Hatchling;
-- NumPy core dependency;
-- optional `gis` extra for Rasterio;
-- optional `dev` extra for pytest/coverage/Ruff/pre-commit.
-
-## 8. Documentation contract
-
-Living documents:
-
-```text
 docs/DESIGN.md
 docs/DEVELOPMENT.md
 docs/STATUS.md
 docs/HANDOFF.md
 docs/VALIDATION.md
+docs/BEHAVIOR_DATA_CONTRACT.md
 ```
-
-README is the landing page. Detailed scientific assumptions, derivations, validation protocols, and developer continuation details belong under `docs/`.
 
 RepoForge philosophy to preserve:
 
-- scientific-python / standard style;
-- README remains representative and runnable;
-- validation and limitations are explicit;
-- hand-edited scientific body prose must not be casually overwritten by a template tool;
-- if RepoForge managed sections are applied later, prefer managed header regions rather than whole-file ownership.
+- use `scientific-python / standard` when migrated;
+- README is a landing page;
+- scientific body prose remains hand-maintained;
+- prefer RepoForge managed header sections rather than whole-file ownership;
+- do not force migration until the diff is reviewed.
 
-## 9. Performance contract
+## 10. Performance contract
 
 Do not begin with C++, Cython, CUDA, Torch, or JAX.
 
@@ -291,11 +369,11 @@ profiling
 Numba only for measured hotspots
 ```
 
-Keep the NumPy reference after optimization so equivalence can be tested.
+Keep the NumPy reference after optimization so numerical equivalence can be tested.
 
-## 10. Data-model direction
+## 11. Data-model direction
 
-Prefer structure-of-arrays:
+Continue structure-of-arrays:
 
 ```text
 state       [Y, X]
@@ -309,7 +387,7 @@ moisture    [T, Y, X]
 
 Do not create one heavyweight Python object per raster cell.
 
-Future GIS compatibility checks should cover:
+Future GIS compatibility checks still need:
 
 ```text
 CRS
@@ -317,56 +395,65 @@ shape
 resolution
 transform
 extent
-NoData
+NoData execution policy
 units where scientifically important
 ```
 
-## 11. Immediate next implementation target
+## 12. Immediate next implementation target
 
-Do **not** jump directly into the full Rothermel or FBP equations.
+The common result/data boundary is now implemented. The next session should **not** redesign it unless a validated scientific requirement proves it inadequate.
 
-First establish the common fire-behavior boundary:
-
-```text
-FireBehaviorResult
-      ↓
-FireBehaviorModel protocol
-      ↓
-minimal environmental input contract
-      ↓
-reference tests
-```
-
-The purpose is to ensure Rothermel and FBP can both feed CA rules through one stable interface.
-
-Recommended next files:
+Next task:
 
 ```text
-src/pyfireca/behavior/__init__.py
-src/pyfireca/behavior/base.py
-src/pyfireca/data.py
-
-tests/test_behavior_base.py
-tests/test_data.py
+first real behavior family
+      ↓
+model-specific typed inputs
+      ↓
+initial fuel representation
+      ↓
+reference fixtures
+      ↓
+scientific equations
 ```
 
-Only create `rothermel.py` after the result/input contracts and units are documented.
+Recommended exact sequence:
 
-## 12. Open design questions
+1. choose whether the first validated behavior implementation is Rothermel or FBP;
+2. inspect the authoritative equations/reference implementation used for validation;
+3. define only that model's required input dataclass and fuel representation;
+4. document source units and conversion rules;
+5. create reference fixtures before implementing the full equation chain;
+6. implement the readable NumPy reference;
+7. connect it to `FireBehaviorResult`;
+8. only then build a behavior-informed CA rule.
 
-These remain intentionally unresolved:
+Because Cell2Fire is the principal CA reference, FBP will eventually be required. Rothermel remains useful because SimFire/Pyretechnics provide independent comparison paths. Choose the first implementation based on validation quality, not which file is shorter.
 
-1. Exact common output fields/units for Rothermel and FBP.
-2. How dynamic weather time coordinates map to simulation time.
-3. Full-array vs sparse transition representation for later performance work.
-4. Whether future asynchronous/event-driven updating is a scheduler abstraction or a separate simulation class.
-5. Exact additional propagation state needed by a Cell2Fire-like distance-accumulation rule.
-6. GeoTIFF metadata/NoData convention for arrival time and state outputs.
-7. Monte Carlo RNG stream-generation policy.
+## 13. Open design questions
 
-When one of these is resolved, add a design decision to `docs/DESIGN.md` rather than hiding the choice inside code.
+Resolved this session:
 
-## 13. Definition of a good next handoff
+- common behavior output fields/units;
+- common direction convention;
+- static/dynamic in-memory layer representation;
+- dynamic layers currently use a common integer time length;
+- behavior inputs remain model-specific.
+
+Still open:
+
+1. first behavior family to implement/validate;
+2. exact first fuel representation;
+3. how dynamic weather physical timestamps map to simulation time;
+4. full-array vs sparse transitions for later performance work;
+5. asynchronous/event-driven scheduler architecture;
+6. extra propagation state for Cell2Fire-like distance accumulation;
+7. GeoTIFF metadata/NoData convention for arrival time/state outputs;
+8. Monte Carlo RNG stream-generation policy.
+
+When one is resolved, record it in `docs/DESIGN.md` rather than hiding it inside code.
+
+## 14. Definition of a good next handoff
 
 At the end of every development session, this file should answer:
 
