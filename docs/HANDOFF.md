@@ -394,7 +394,7 @@ Python 3.12 pytest
 Python 3.13 pytest
 ```
 
-The new R1 scientific tests pass in the Python 3.11/3.12/3.13 matrix. During this pass, CI failures were Ruff-only style issues in unit-test assertions; those assertions were corrected. The next session should inspect the newest run if the badge is not green rather than changing scientific code based on an older formatting failure.
+The R1 code baseline at commit `793c393` is fully green: Ruff lint, Ruff format, the quality pytest run, and Python 3.11/3.12/3.13 tests all pass. Earlier red runs in this development pass were style-only and are superseded by that verified baseline.
 
 Engineering files already present:
 
