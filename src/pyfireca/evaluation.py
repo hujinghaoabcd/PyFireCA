@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import hypot, isfinite
+from math import hypot, isfinite, sqrt
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
 from pyfireca.behavior._surface_ellipse import spread_rate_from_ignition_point_m_s
 from pyfireca.propagation import north_up_square_grid_offset_bearing_deg
+
+ImmediateSquareTopology = Literal["vn4", "moore8"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +24,89 @@ class ArrivalErrorMetrics:
     rmse_s: float
     bias_s: float
     max_abs_error_s: float
+
+
+def immediate_square_lattice_path_distance_m(
+    drow: int,
+    dcol: int,
+    *,
+    cell_size_m: float,
+    topology: ImmediateSquareTopology,
+) -> float:
+    """Return the exact shortest lattice-path length for VN4 or Moore8.
+
+    ``VN4`` produces the Manhattan path length. ``Moore8`` uses unit cardinal
+    edges plus ``sqrt(2)`` diagonal edges and therefore produces the standard
+    octile path length.
+    """
+
+    if (
+        isinstance(drow, bool)
+        or isinstance(dcol, bool)
+        or not isinstance(drow, int)
+        or not isinstance(dcol, int)
+    ):
+        raise TypeError("drow and dcol must be integers")
+    if not isfinite(cell_size_m) or cell_size_m <= 0.0:
+        raise ValueError("cell_size_m must be finite and positive")
+    if topology not in ("vn4", "moore8"):
+        raise ValueError("topology must be 'vn4' or 'moore8'")
+
+    row_steps = abs(drow)
+    col_steps = abs(dcol)
+    if topology == "vn4":
+        return (row_steps + col_steps) * cell_size_m
+
+    diagonal_steps = min(row_steps, col_steps)
+    cardinal_steps = max(row_steps, col_steps) - diagonal_steps
+    return (cardinal_steps + sqrt(2.0) * diagonal_steps) * cell_size_m
+
+
+def homogeneous_ellipse_lattice_arrival_error_s(
+    drow: int,
+    dcol: int,
+    *,
+    cell_size_m: float,
+    head_spread_rate_m_s: float,
+    eccentricity: float,
+    topology: ImmediateSquareTopology,
+) -> float:
+    """Return the exact homogeneous ellipse CA arrival error for VN4/Moore8.
+
+    For the pinned Behave/Catchpole ignition-point ellipse,
+
+    ``R(beta) = R_head * (1-e) / (1-e*cos(beta))``.
+
+    Therefore one edge travel time can be written as a path-length term minus a
+    heading-direction projection term. When edge times are summed along any
+    path between fixed endpoints, the projection term telescopes to the same
+    endpoint displacement for every path. The shortest-path solver consequently
+    minimizes only geometric lattice path length.
+
+    The exact CA-minus-continuous arrival error is therefore::
+
+        (D_lattice - D_euclidean) / (R_head * (1-e))
+
+    This expression is independent of the fire heading angle. It also shows why
+    reducing cell size alone does not guarantee removal of lattice bias when the
+    allowed direction set remains fixed at four or eight directions.
+    """
+
+    if not isfinite(head_spread_rate_m_s) or head_spread_rate_m_s <= 0.0:
+        raise ValueError("head_spread_rate_m_s must be finite and positive")
+    if not isfinite(eccentricity) or not 0.0 <= eccentricity < 1.0:
+        raise ValueError("eccentricity must be finite and in [0, 1)")
+
+    lattice_distance = immediate_square_lattice_path_distance_m(
+        drow,
+        dcol,
+        cell_size_m=cell_size_m,
+        topology=topology,
+    )
+    euclidean_distance = hypot(drow, dcol) * cell_size_m
+    return (lattice_distance - euclidean_distance) / (
+        head_spread_rate_m_s * (1.0 - eccentricity)
+    )
 
 
 def analytical_ellipse_arrival_times(
