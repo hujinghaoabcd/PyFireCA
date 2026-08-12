@@ -8,10 +8,40 @@ version = "0.1.0a0"
 description = "A modular and extensible cellular automata framework for wildfire spread simulation."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+  { name = "Jinghao Hu" },
+]
+keywords = [
+  "wildfire",
+  "cellular automata",
+  "fire spread",
+  "GIS",
+  "geospatial",
+  "Rothermel",
+  "scientific computing",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: GIS",
+]
 dependencies = [
   "numpy>=1.26",
   "PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/hujinghaoabcd/PyFireCA"
+Repository = "https://github.com/hujinghaoabcd/PyFireCA"
+Issues = "https://github.com/hujinghaoabcd/PyFireCA/issues"
+Documentation = "https://github.com/hujinghaoabcd/PyFireCA/blob/main/docs/RUNNING_SIMULATOR.md"
+Changelog = "https://github.com/hujinghaoabcd/PyFireCA/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pyfireca = "pyfireca.cli:main"
