@@ -2,11 +2,11 @@
 
 > Updated: 2026-08-12
 >
-> Current milestone: **R6 — physical-time arrival propagation baseline**
+> Current milestone: **R7 — validated directional Rothermel-to-arrival coupling**
 
 ## Current position
 
-PyFireCA now has seven working foundations:
+PyFireCA now has eight working foundations:
 
 ```text
 1. Wildfire CA reference core
@@ -15,32 +15,35 @@ PyFireCA now has seven working foundations:
 4. Validated Albini-adjusted Rothermel R1–R4 path
 5. Dynamic Scott–Burgan herbaceous curing/load transfer
 6. Audited standard-fuel catalogue subset
-7. Static directional-ROS → travel-time → arrival-time propagation baseline
+7. Static physical travel-time / arrival-time propagation
+8. Behave-aligned surface ellipse → directional neighbor ROS → arrival coupling
 ```
 
 Current scientific path:
 
 ```text
-standard/dynamic fuel + moisture + wind + slope
-                  ↓
-          RothermelModel.compute()
-                  ↓
-       maximum ROS + direction
-                  ↓
-      directional spread model          ← next science gate
-                  ↓
-    direction-specific neighbor ROS
-                  ↓
-     distance / ROS = travel time        ✓
-                  ↓
-       earliest arrival time             ✓
-                  ↓
- physical-time FireState snapshot        ✓
+fuel + moisture + wind + slope
+              ↓
+     RothermelModel.compute()
+              ↓
+ maximum ROS + maximum direction
+              ↓
+  Behave/Catchpole surface ellipse
+              ↓
+FromIgnitionPoint directional ROS
+              ↓
+north-up neighbor edge bearing
+              ↓
+     physical distance / ROS
+              ↓
+       earliest arrival time
+              ↓
+  physical-time FireState snapshot
 ```
 
-The major missing scientific link is now **validated off-axis directional spread**, not base Rothermel ROS, dynamic curing, or physical travel time.
+This path is now implemented end to end for a static homogeneous Rothermel environment. The next major engineering/science gap is **spatially heterogeneous static behavior inputs**, followed later by affine-aware geometry and truly time-dependent weather.
 
-## Completed
+## Completed foundations
 
 ### CA core
 
@@ -49,56 +52,38 @@ The major missing scientific link is now **validated off-axis directional spread
 - Moore and Von Neumann neighborhoods;
 - synchronous `TransitionRule` and `Simulation` reference path;
 - explicit NumPy RNG;
-- deterministic `NeighborIgnitionRule` architectural baseline;
+- deterministic `NeighborIgnitionRule` architecture baseline;
 - `build_initial_state(domain_mask, ignition_mask)`;
 - synchronous no-cascade regression tests.
 
-The original synchronous `Simulation` remains unchanged. Physical-time propagation is implemented as a separate baseline rather than silently assigning a `dt` to one CA step.
+The original synchronous `Simulation` remains unchanged. One CA step still has no hidden physical duration.
 
-### Common behavior/data boundary
-
-- generic `FireBehaviorModel[InputT]`;
-- immutable `FireBehaviorResult`;
-- model-independent spread-rate/direction output;
-- `SpatialLayer` for `(Y, X)` and `(T, Y, X)`;
-- `EnvironmentalData` alignment checks;
-- policy-free `snapshot()`;
-- `require_complete_snapshot()` fail-fast missing-data gate.
-
-Dynamic missing weather is never silently interpolated or converted into persistent `UNBURNABLE` state.
-
-### GIS / landscape baseline
+### Behavior/data/GIS boundary
 
 Implemented:
 
 ```text
+FireBehaviorModel
+FireBehaviorResult
+SpatialLayer
+EnvironmentalData
+require_complete_snapshot
 RasterMetadata
-RasterAlignmentError
 validate_raster_alignment
-validate_named_raster_alignment
-read_raster
-write_raster
+read_raster / write_raster
 write_state_raster
 nodata_mask
 build_domain_mask
 LandscapeInput
 ```
 
-Simulation never silently reprojects/resamples. Static NoData affects the persistent domain only through explicit caller selection.
-
-Canonical state GeoTIFF:
-
-```text
-dtype          uint8
-state codes    0..3
-GeoTIFF NoData None
-```
+Static NoData becomes persistent domain semantics only when explicitly selected. Dynamic missing weather never silently creates permanent `UNBURNABLE` cells.
 
 ## Rothermel validation status
 
 ### R1 — heterogeneous fuel-bed quantities — complete
 
-Implemented and tested:
+Validated:
 
 ```text
 SI ↔ ft/lb/Btu/min conversions
@@ -109,7 +94,7 @@ bulk density
 optimum packing ratio
 ```
 
-Fixed six-class order:
+Fixed class order:
 
 ```text
 DEAD_1H
@@ -121,22 +106,6 @@ LIVE_WOODY
 ```
 
 ### R2 — Albini-adjusted base ROS — Grade B
-
-Formula path includes:
-
-```text
-combustible/net loading
-SAV size-bin weighted loading
-mineral damping
-moisture damping
-live moisture of extinction
-Albini reaction-velocity exponent
-reaction velocity/intensity
-propagating flux
-preignition heat
-heat sink
-no-wind/no-slope ROS
-```
 
 Pinned Behave 7 references:
 
@@ -150,9 +119,9 @@ FM2 static dead + live
 0.013305319151517395 m/s
 ```
 
-### R3 — wind, slope, and maximum-spread vector
+### R3 — wind, slope, maximum-spread vector
 
-Pinned Grade B references:
+Pinned references:
 
 ```text
 FM1, 30% slope, zero wind
@@ -161,24 +130,22 @@ FM1, 30% slope, zero wind
 FM1, zero slope, 100 ft/min direct-midflame wind
 8.834274755440232 chains/h
 
-FM1, 30% slope + 100 ft/min perpendicular wind push
+FM1, 30% slope + perpendicular 100 ft/min wind push
 21.399596624626479 chains/h maximum ROS
 ```
 
 Implemented:
 
 - slope factor;
-- scalar wind factor;
+- wind factor;
 - effective-wind inversion;
 - optional wind-speed limit;
-- non-collinear wind/slope vector combination;
-- meteorological wind-from → downwind push;
-- downslope aspect → upslope;
-- relative direction → geographic bearing.
+- non-collinear wind/slope vector composition;
+- explicit wind-from/downwind and aspect/upslope direction conversions.
 
-Maximum-spread magnitude is externally Grade B for the perpendicular case. Direction is source-aligned and analytically tested but is not labelled as an independent Grade B direction output.
+When wind limiting is enabled and exceeded, `effective_wind_speed_m_s` now reports the **limited** effective wind, matching the Behave operational path. This is required before computing the fire ellipse.
 
-### R4 — public behavior model — complete
+### R4 — public model assembly — complete
 
 ```text
 RothermelModel.compute(RothermelInputs)
@@ -193,69 +160,38 @@ spread_rate_m_s
 spread_direction_deg
 ```
 
-Zero wind + zero slope returns `spread_direction_deg=None` rather than inventing a head-fire direction.
-
-Rothermel-specific diagnostics include base ROS, reaction intensity, SAV, packing ratios, wind/slope factors, effective wind, dynamic herbaceous transfer, and wind-limit state.
+Zero wind + zero slope returns `spread_direction_deg=None`.
 
 `fireline_intensity_w_m` and `flame_length_m` remain `None` until separately validated.
 
-## R5 — dynamic herbaceous curing/load transfer — Grade B
+## R5 — dynamic herbaceous curing — Grade B
 
-Pinned operational transfer rule:
+Pinned transfer rule:
 
 ```text
-live herb moisture < 0.30
-    transfer fraction = 1.0
-
-0.30 <= moisture <= 1.20
-    transfer fraction = 1.333 - 1.11 * moisture
-
-moisture > 1.20
-    transfer fraction = 0.0
+M_live_herb < 0.30       transfer = 1.0
+0.30 <= M <= 1.20       transfer = 1.333 - 1.11*M
+M > 1.20                 transfer = 0.0
 ```
 
-Operational life-state semantics preserved:
-
-- transferred dead herb uses live-herb SAV;
-- transferred dead herb uses dead-fuel heat/density/mineral properties;
-- transferred dead herb uses dead 1-h moisture;
-- herbaceous load is conserved;
-- redistribution is resolved before the common R1/R2 path.
-
-Pinned GR1 case:
+Pinned GR1 result:
 
 ```text
-fuel model            GR1 / 101
-dead moisture         5 / 5 / 5 %
-live herb moisture    60 %
-live woody moisture   90 %
-wind                   0
-slope                  0
+model        101 / GR1
+dead M       5/5/5 %
+live herb M  60 %
+live woody M 90 %
+wind/slope   0 / 0
 
-Behave 7 ROS
 0.71419316836403091 chains/h
 0.003990911424818205 m/s
 ```
 
-`RothermelModel.compute()` reproduces this Grade B result end to end.
-
-External workflow:
-
-```text
-.github/workflows/behave7-r5-dynamic-probe.yml
-```
-
-The workflow has been promoted from a probe to a fixed regression.
+`RothermelModel.compute()` reproduces this result end to end.
 
 ## Audited standard-fuel catalogue
 
-Public module:
-
-```text
-pyfireca.behavior.fuel_catalog
-```
-
-Current deliberately small audited subset:
+Current public audited subset:
 
 ```text
 1    FM1
@@ -263,9 +199,7 @@ Current deliberately small audited subset:
 101  GR1
 ```
 
-The catalogue stores the pinned Behave values in native source units, then explicitly converts them to PyFireCA's SI `RothermelFuelModel` contract.
-
-Public API:
+API:
 
 ```text
 StandardFuelModelRecord
@@ -274,72 +208,149 @@ get_standard_fuel_model_record(number)
 get_standard_fuel_model(number)
 ```
 
-FM1, FM2, and GR1 catalogue-generated models are regression-tested against their existing Grade B ROS results. Unknown models fail explicitly as “not audited yet”; the package does not pretend all Anderson/Scott–Burgan records have already been reviewed.
+Records retain pinned native source values and convert explicitly to the SI `RothermelFuelModel` contract. Unknown models fail explicitly as not yet audited.
 
-## R6 — physical travel-time and arrival baseline
+## R6 — physical travel time and earliest arrival — complete baseline
 
-### Physical edge geometry
-
-Public module:
+`pyfireca.propagation` provides:
 
 ```text
-pyfireca.propagation
+square_grid_neighbor_distance_m
+north_up_square_grid_offset_bearing_deg
+spread_travel_time_s
+square_grid_neighbor_travel_time_s
 ```
 
-Implemented:
-
-```text
-square_grid_neighbor_distance_m(offset, cell_size_m)
-spread_travel_time_s(distance_m, directional_spread_rate_m_s)
-square_grid_neighbor_travel_time_s(...)
-```
-
-Scientific contract:
+Contract:
 
 ```text
 travel_time = physical_distance / direction_specific_ROS
 ```
 
-A positive distance with zero ROS is unreachable (`+inf`).
-
-This layer does **not** derive off-axis ROS from the maximum/head-fire ROS.
-
-### Static event-driven arrival solver
-
-Public API:
+`north_up_square_grid_offset_bearing_deg()` is explicitly north-up only:
 
 ```text
-DirectionalSpreadRateProvider
-ConstantDirectionalSpreadRate
-StaticArrivalTimeSolver
-arrival_times_to_state
+row -1 → north
+col +1 → east
+row +1 → south
+col -1 → west
 ```
 
-`StaticArrivalTimeSolver` uses a Dijkstra-style earliest-arrival calculation for static non-negative edge travel times.
+Rotated/sheared rasters require a later affine-aware adapter.
 
-Inputs:
+`StaticArrivalTimeSolver` performs Dijkstra-style earliest-arrival propagation for static non-negative edge travel times.
+
+`arrival_times_to_state(..., time_s, burn_duration_s)` maps arrival fields to canonical `FireState` snapshots.
+
+## R7 — Behave-aligned directional surface spread — Grade B
+
+### Surface-fire ellipse
+
+Pinned Behave surface L/W relation:
 
 ```text
-domain_mask
-ignition_times_s
+L/W = 0.936 exp(0.1147 U) + 0.461 exp(-0.0692 U) - 0.397
 ```
 
-Finite non-negative ignition values are external ignition times; `+inf` means no initial ignition. Multiple ignition times, barriers, anisotropic directional providers, Moore/Von Neumann geometry, zero ROS, and invalid edge rates are tested.
+where `U` is effective wind in mph. Surface L/W is capped at 8.
 
-### Physical time → CA state
-
-`arrival_times_to_state(..., time_s, burn_duration_s)` maps:
+Then:
 
 ```text
-outside domain                      → UNBURNABLE
-before arrival                      → UNBURNED
-arrival <= t < arrival + duration   → BURNING
-t >= arrival + duration             → BURNED
+e = sqrt((L/W)^2 - 1) / (L/W)
+R_back = R_head * (1 - e) / (1 + e)
+R_flank = (R_head + R_back) / (2 * L/W)
 ```
 
-`burn_duration_s` is explicit because arrival time alone cannot distinguish `BURNING` from `BURNED`.
+The pinned Behave `FromIgnitionPoint` path reduces the Catchpole-style ellipse to:
 
-The original synchronous `Simulation` and the physical-time arrival solver intentionally coexist as separate reference propagation approaches.
+```text
+R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
+```
+
+where `beta=0°` is heading and `beta=180°` is backing.
+
+Implemented in:
+
+```text
+src/pyfireca/behavior/_surface_ellipse.py
+```
+
+### Grade B off-axis reference
+
+Dedicated pinned workflow:
+
+```text
+.github/workflows/behave7-r7-directional.yml
+```
+
+Case:
+
+```text
+FM1
+dead moisture 5/5/5%
+100 ft/min DirectMidflame wind
+zero slope
+90° from head
+SurfaceFireSpreadDirectionMode::FromIgnitionPoint
+```
+
+Official full-precision Behave result:
+
+```text
+5.2277130003983068 chains/h
+0.02921246024622574 m/s
+```
+
+The strengthened workflow requires:
+
+```text
+raw value match
+Total tests performed: 172
+Total tests passed:    172
+Total tests failed:    0
+```
+
+Therefore the 90° off-axis radial ROS is Grade B.
+
+### Homogeneous directional provider
+
+Public behavior API now includes:
+
+```text
+HomogeneousRothermelDirectionalSpreadRate
+```
+
+It evaluates one static homogeneous `RothermelInputs`, caches its maximum behavior and ellipse, converts each north-up raster neighbor offset to a geographic bearing, and returns the Behave-style `FromIgnitionPoint` radial ROS for that edge.
+
+Verified FM1 100 ft/min behavior:
+
+```text
+east  / head      0.04936592733340002 m/s
+north / south     0.02921246024622574 m/s  ← Grade B 90°
+west  / backing   0.02074385430924511 m/s
+NE/SE / 45°       0.041067604539224284 m/s
+```
+
+The diagonal tests explicitly verify ellipse directional ROS rather than `head_ROS*cos(theta)`.
+
+### First full anisotropic arrival coupling
+
+End-to-end tests now exercise:
+
+```text
+FM1 Rothermel
+→ maximum spread behavior
+→ effective-wind ellipse
+→ neighbor bearing
+→ directional edge ROS
+→ edge travel time
+→ StaticArrivalTimeSolver
+```
+
+On an east-west line, the east head-fire neighbor arrives before the west backing-fire neighbor. On a north-south line, arrival time uses the pinned Grade B 90° off-axis ROS.
+
+This is the first physically timed anisotropic propagation path in PyFireCA.
 
 ## Validation provenance
 
@@ -352,27 +363,28 @@ Grade C  independent implementation comparison
 Grade D  internal analytical/synthetic fixture
 ```
 
-Pinned operational revisions:
+Pinned revisions:
 
 ```text
 firelab/behave-app
 a3cfcd5903188d73445948af16644868225bb9d5
 
-firelab/behave core
+firelab/behave
 29888c7ad364aa18cfb340f4c25a8e395f24260f
 ```
 
-Stable external workflows:
+External workflows:
 
 ```text
 .github/workflows/behave7-r2-probe.yml
 .github/workflows/behave7-r3-vector.yml
 .github/workflows/behave7-r5-dynamic-probe.yml
+.github/workflows/behave7-r7-directional.yml
 ```
 
 ## CI state
 
-Functional tests covering R1–R6, dynamic GR1, audited catalogue, GIS, travel-time, arrival-time, and physical-time snapshots pass across:
+Functional suites covering R1–R7, dynamic GR1, fuel catalogue, GIS, ellipse directional spread, travel time, arrival time, and state snapshots pass across:
 
 ```text
 Python 3.11  ✓
@@ -381,80 +393,54 @@ Python 3.13  ✓
 GIS          ✓
 ```
 
-Use the latest post-format all-green run as the canonical CI baseline.
+The R7 pinned directional workflow is green. Use the latest post-format all-green main run as the canonical CI baseline.
 
 ## Key decisions now fixed
 
-1. Fire behavior and CA propagation remain separate.
-2. NumPy remains the readable scientific reference path.
-3. GIS I/O stays outside numerical kernels.
-4. Dynamic weather missing data never silently alter persistent state.
-5. Rothermel inputs use SI quantities and explicit midflame wind.
-6. R2 is explicitly Albini-adjusted Rothermel.
-7. Wind limit is optional and disabled by default.
-8. Wind-from, wind-push, downslope aspect, and upslope are separate semantics.
-9. Non-collinear wind/slope effects are vector-combined.
-10. Dynamic herbaceous curing is a load-transfer preprocessing stage, not a second Rothermel implementation.
-11. Standard fuel records are exposed only after audit against pinned provenance.
-12. One synchronous CA step has no hidden physical duration.
-13. Physical travel time requires a direction-specific ROS.
-14. Maximum/head ROS is not silently projected onto off-axis neighbors.
-15. Static earliest-arrival propagation remains separate from future time-dependent weather scheduling.
-16. Fireline intensity/flame length are not declared validated prematurely.
+1. Fire behavior and propagation remain separate.
+2. One synchronous CA step has no hidden physical duration.
+3. Physical edge travel time requires direction-specific ROS.
+4. Maximum/head ROS is never silently assigned to all neighbors.
+5. Surface off-axis ROS uses the pinned Behave/Catchpole `FromIgnitionPoint` ellipse path.
+6. `FromPerimeter` directional rates are not used for ignition-point arrival propagation.
+7. Ellipse L/W uses effective wind; if wind limiting is active, it uses the limited effective wind.
+8. North-up raster offset bearings are explicit; rotated/sheared grids need an affine-aware adapter.
+9. The current Rothermel directional provider uses **source-cell behavior** for each outgoing edge.
+10. The current provider is static/homogeneous; time-dependent weather is not approximated as static without an explicit decision.
+11. Dynamic curing remains a preprocessing redistribution before the shared R1/R2 chain.
+12. Fireline intensity/flame length remain outside validated public outputs.
 
-## Not implemented yet
+## Immediate next target
 
-### Immediate scientific work
+The off-axis science gate is now resolved. Next:
 
-- validated ellipse / directional spread relation away from maximum-spread direction;
-- backing and flanking ROS validation;
-- a Rothermel directional-ROS provider for raster neighbor edges;
-- end-to-end Rothermel → directional ROS → arrival-time spread-shape validation.
+```text
+validated homogeneous anisotropic path                 ✓
+        ↓
+static spatially heterogeneous Rothermel inputs        NEXT
+        ↓
+per-source-cell behavior + ellipse edge provider
+        ↓
+heterogeneous earliest-arrival validation
+        ↓
+affine-aware distance/bearing for non-square/rotated GIS grids
+        ↓
+time-dependent weather/event scheduling
+```
 
-### Catalogue work
+For the first heterogeneous baseline, keep the edge semantic explicit: **outgoing edge ROS is determined by the source cell**. Do not invent source/target averaging until it has a scientific rationale and a separately tested alternative.
 
-- remaining Anderson 13 records;
-- remaining Scott–Burgan 40 records;
-- nonburnable standard records and public grouping/metadata.
+## Deferred work
 
-### Output science still deferred
-
-- fireline intensity output;
-- flame length output;
-- residence time / heat-per-unit-area outputs.
-
-### Dynamic data work deliberately deferred
-
-- physical timestamp interpolation;
-- time-dependent arrival/event scheduler;
-- NetCDF/xarray adapter;
-- high-level WRF/weather coupling.
-
-### Later research
-
+- full Anderson 13 and Scott–Burgan 40 catalogue audit;
+- affine-aware rotated/non-square raster geometry;
+- time-varying weather/event scheduler;
+- physical timestamp interpolation / NetCDF/xarray integration;
+- fireline intensity and flame length validation;
 - FBP;
 - crown fire;
 - spotting;
 - suppression;
 - Monte Carlo;
-- sparse/event optimization;
 - profiling-led Numba;
 - Torch/JAX/GPU/differentiable CA.
-
-## Immediate next target
-
-```text
-validated maximum Rothermel spread               ✓
-dynamic curing                                   ✓
-audited reference fuel subset                    ✓
-physical edge travel time                        ✓
-static earliest-arrival baseline                 ✓
-        ↓
-validated elliptical directional spread
-        ↓
-Rothermel directional edge provider
-        ↓
-end-to-end anisotropic fire-shape validation
-```
-
-Do not jump to GPU or learned CA before this physical behavior-to-arrival path is validated end to end.
