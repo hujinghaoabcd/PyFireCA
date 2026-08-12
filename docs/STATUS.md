@@ -2,11 +2,11 @@
 
 > Updated: 2026-08-13
 >
-> Current milestone: **S9 — static baseline release candidate**
+> Current milestone: **S9 — static baseline release-ready**
 
 ## Current position
 
-PyFireCA now has a complete first-pass static wildfire simulator, not only a scientific kernel:
+PyFireCA now has a complete first-pass static wildfire simulator and has passed the full release-candidate engineering gate.
 
 ```text
 YAML configuration
@@ -37,9 +37,9 @@ pyfireca validate run.yml
 pyfireca run run.yml
 ```
 
-The implementation priority is no longer feature completion. The code baseline is at **release-candidate readiness**; new PyFireCA-specific CA innovations remain frozen in `docs/FUTURE_RESEARCH.md` until the baseline release gate is closed.
+The code baseline is now technically ready for release. New PyFireCA-specific CA innovations remain frozen in `docs/FUTURE_RESEARCH.md` until a baseline tag/release is intentionally created.
 
-## Release-candidate summary
+## Release-ready baseline
 
 Implemented and tested:
 
@@ -47,7 +47,7 @@ Implemented and tested:
 synchronous CA architecture reference
 static physical arrival solver
 strict GIS/data contracts
-Albini-adjusted Rothermel R1–R5
+Albini-adjusted Rothermel
 Behave/Catchpole off-axis surface spread
 Anderson FM1–FM13 + Scott–Burgan GR1
 heterogeneous static raster behavior
@@ -58,6 +58,7 @@ validate/run CLI
 reproducible run directory
 GeoTIFF + GeoJSON outputs
 input SHA-256 + fuel provenance
+MIT license + packaged license metadata
 ```
 
 ## Scientific baseline
@@ -95,7 +96,7 @@ Contract:
 travel_time = physical_edge_distance / direction_specific_ROS
 ```
 
-The physical baseline uses immediate-neighbor edges so a larger neighborhood cannot silently skip an intermediate barrier.
+The physical baseline uses immediate-neighbor edges so larger-neighborhood hops cannot silently skip barriers.
 
 ### Heterogeneous edge semantics
 
@@ -103,7 +104,7 @@ Current default:
 
 > **The source cell controls outgoing edge ROS.**
 
-Source/target averaging, half-cell coupling, interface resistance, and adaptive edge rules remain explicit future research variants, not hidden baseline behavior.
+Source/target averaging, half-cell coupling, interface resistance, and adaptive edge rules remain future research variants rather than hidden baseline behavior.
 
 ## Rothermel validation truth
 
@@ -111,15 +112,13 @@ Selected reference line:
 
 > **Albini-adjusted Rothermel surface fire behavior.**
 
-Pinned Grade B values include:
+Protected Grade B references include:
 
 ```text
 FM1 base
-4.4262698923571939 chains/h
 0.024733996158492002 m/s
 
 FM2 base
-2.3810521029916596 chains/h
 0.013305319151517395 m/s
 
 FM1, 30% slope
@@ -132,15 +131,13 @@ FM1, 30% slope + perpendicular wind
 21.399596624626479 chains/h
 
 GR1 dynamic, live-herb moisture 60%, zero wind/slope
-0.71419316836403091 chains/h
 0.003990911424818205 m/s
 
 FM1 FromIgnitionPoint 90° off-axis
-5.2277130003983068 chains/h
 0.02921246024622574 m/s
 ```
 
-Fireline intensity/flame length remain outside validated baseline public outputs.
+Fireline intensity and flame length remain outside validated baseline public outputs.
 
 ## Audited fuel catalogue
 
@@ -151,7 +148,7 @@ Anderson FM1–FM13
 Scott–Burgan GR1 (101)
 ```
 
-Anderson records were audited directly against pinned USFS Fire Lab Behave core:
+Anderson records are audited against pinned USFS Fire Lab Behave core:
 
 ```text
 firelab/behave
@@ -159,13 +156,11 @@ commit 29888c7ad364aa18cfb340f4c25a8e395f24260f
 src/behave/fuelModels.cpp
 ```
 
-Tests verify native record values, SI conversion, valid computation for FM1–FM13, and unchanged FM1/FM2/GR1 reference outputs.
+Remaining Scott–Burgan models do not block this first static baseline.
 
-The remaining Scott–Burgan catalogue does not block the first static release.
+## Static file workflow
 
-## Static input contract
-
-Version-1 file workflow requires exactly:
+Version-1 input requires exactly ten aligned rasters:
 
 ```text
 fuel_model                   integer code
@@ -180,9 +175,7 @@ slope                        degrees
 aspect                       degrees
 ```
 
-All rasters must share shape, CRS, and full affine alignment.
-
-Current physical geometry is deliberately fail-closed:
+Current geometry is deliberately fail-closed:
 
 ```text
 north-up
@@ -193,44 +186,21 @@ cell_size_m matches affine pixel size
 
 No moisture/slope/wind-height/angle conversion is silently inferred.
 
-## User-facing simulator API
+## User API and CLI
 
-Stable baseline objects:
+Stable baseline API:
 
 ```text
 IgnitionEvent
-build_ignition_times
 StaticWildfireSimulationRequest
 StaticWildfireSimulationResult
 run_static_wildfire_simulation
+StaticRunConfig
+validate_static_run
+run_static_config
 ```
 
-Result API includes:
-
-```text
-arrival_times_s
-burned_mask
-burned_cell_count
-burned_area_m2
-first_arrival_s
-last_arrival_s
-unreachable_domain_cell_count
-state_at(...)
-burned_mask_at(...)
-summary_metrics()
-```
-
-## YAML / CLI
-
-Runtime configuration dependency:
-
-```text
-PyYAML
-```
-
-CLI uses standard-library `argparse`.
-
-Commands:
+CLI:
 
 ```bash
 pyfireca validate config.yml
@@ -238,18 +208,6 @@ pyfireca run config.yml
 ```
 
 Version-1 configuration is strict and does not expose research-only neighborhood/interface variants.
-
-Example:
-
-```text
-examples/static_run.yml
-```
-
-Manual:
-
-```text
-docs/RUNNING_SIMULATOR.md
-```
 
 ## Run-directory contract
 
@@ -267,34 +225,11 @@ runs/<run>/
     └── perimeter.geojson
 ```
 
-`metadata.json` records input SHA-256, raster geometry, ignition events, encountered fuel models, and pinned fuel-catalogue provenance.
-
-Spatial output semantics:
-
-```text
-arrival_time.tif
-  float64 seconds
-  -1 file NoData for no finite arrival
-
-state.tif
-  terminal canonical state
-  0 UNBURNABLE
-  1 in-domain UNBURNED/unreachable
-  3 BURNED/reachable
-
-burned_mask.tif
-  uint8 0/1 eventual footprint
-
-perimeter.geojson
-  polygonized burned footprint
-  source CRS → WGS84 before serialization
-```
-
-Run metrics have one canonical location: root `metrics.json`.
+`metadata.json` records input SHA-256, raster geometry, ignition events, encountered fuel models, and pinned catalogue provenance.
 
 ## CI / package truth
 
-The repository now has five release-relevant CI paths:
+Release-relevant CI currently covers:
 
 ```text
 quality
@@ -305,59 +240,51 @@ GIS
 package
 ```
 
-The package gate has already successfully verified:
+The final MIT release-candidate package gate has passed:
 
 ```text
 wheel build
 sdist build
+License-Expression: MIT verification
+LICENSE present in wheel
+LICENSE present in sdist
 clean wheel install
 pyfireca --help
 clean [gis] wheel install
 Rasterio import
-clean installed-wheel generation of 10 GeoTIFFs
-pyfireca validate on those files
-pyfireca run on those files
-expected result files
+clean installed-wheel generation of ten GeoTIFFs
+pyfireca validate
+pyfireca run
+expected result-file assertions
 ```
 
-This means the documented install → CLI workflow has been exercised from the **built wheel**, not only from an editable checkout.
+The install → CLI workflow is therefore verified from built distributions, not only from an editable checkout.
 
-A runtime/distribution version-equality regression now protects `pyfireca.__version__` against `pyproject.toml` drift.
+## License/package metadata
 
-## Package metadata audit
-
-Completed:
+License:
 
 ```text
-name/version
-author
-keywords
-Python classifiers
-project URLs
-console script
-optional GIS extra
+MIT
+Copyright (c) 2026 Jinghao Hu
 ```
 
-`CITATION.cff` no longer contains a premature release date because the repository currently has no tag or GitHub release.
-
-### Remaining release blocker: license
-
-There is currently **no root LICENSE file** and no package license declaration.
-
-This is intentionally not auto-fixed because selecting MIT/BSD/Apache/GPL/etc. is a project/legal policy choice, not a formatting decision.
-
-Before release:
+Repository/package representation:
 
 ```text
-choose license
-→ add LICENSE
-→ declare matching pyproject license metadata
-→ rerun package/CI gate
+LICENSE
+pyproject.toml: license = "MIT"
+pyproject.toml: license-files = ["LICENSE"]
+Hatchling >= 1.27
 ```
+
+CI directly verifies the SPDX license expression and packaged license files.
+
+There are currently no GitHub tags or releases. `CITATION.cff` therefore deliberately has no `date-released` field yet.
 
 ## Documentation state
 
-Current authoritative documentation has been synchronized to the implemented simulator:
+Authoritative documentation is synchronized around the release-ready static baseline:
 
 ```text
 README.md
@@ -377,25 +304,22 @@ docs/RELEASE_CHECKLIST.md
 CHANGELOG.md
 ```
 
-Old authoritative claims that R2/arrival/CLI were still future work or that the catalogue only contained FM1/FM2/GR1 have been removed where they affected current guidance.
-
 ## Immediate next target
 
-No new scientific feature should be added now.
+No new scientific feature should be added before the intentional release decision.
 
-Remaining gate:
+Remaining publication actions:
 
 ```text
-1. choose/add project license
-2. confirm latest final main commit all green
-3. choose first baseline version/tag
-4. freeze release notes
-5. create tag/GitHub release
-6. add actual date-released to CITATION.cff
-7. record released commit/tag in STATUS/HANDOFF
+1. choose first baseline version/tag
+2. freeze release notes
+3. create tag/GitHub release
+4. add actual date-released to CITATION.cff
+5. record released commit/tag in STATUS/HANDOFF
+6. only then reopen the paper-innovation line
 ```
 
-The code-level baseline is otherwise complete enough to freeze.
+The current package version is `0.1.0a0`; a matching tag such as `v0.1.0a0` would preserve version consistency if selected for the first alpha release.
 
 ## Deferred beyond the first static baseline
 
@@ -415,4 +339,4 @@ Torch/JAX/GPU/differentiable CA
 new PyFireCA-specific CA neighborhood/interface methods
 ```
 
-Research ideas remain in `docs/FUTURE_RESEARCH.md` and should not be resumed until the baseline release gate closes.
+Research ideas remain in `docs/FUTURE_RESEARCH.md` and should not resume until the baseline release gate closes.
