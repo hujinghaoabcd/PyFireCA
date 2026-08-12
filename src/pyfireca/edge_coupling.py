@@ -22,11 +22,11 @@ class HalfCellInterfaceDirectionalSpreadRate:
     The center-to-center travel time is then interpreted as two equal half-edge
     segments::
 
-        t_ij = (d/2)/R_i + (d/2)/R_j
+        t_ij = (d / 2) / R_i + (d / 2) / R_j
 
     For positive rates this is equivalent to the harmonic-mean edge rate::
 
-        R_ij = 2 / (1/R_i + 1/R_j)
+        R_ij = 2 / (1 / R_i + 1 / R_j)
 
     If either directional rate is zero, the interface is unreachable under
     this model and the returned edge ROS is zero.
