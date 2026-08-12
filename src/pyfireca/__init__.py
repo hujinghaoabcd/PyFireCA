@@ -6,6 +6,9 @@ from pyfireca.arrival import (
     StaticArrivalTimeSolver,
     arrival_times_to_state,
 )
+from pyfireca.behavior.crown import CruzCrownFireModel, CruzCrownInputs
+from pyfireca.behavior.fbp import FBPComputation, FBPInputs, FBPModel
+from pyfireca.behavior.fbp_directional import HomogeneousFBPDirectionalSpreadRate
 from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_arrival_solver
 from pyfireca.config import StaticRasterInputPaths, StaticRunConfig, load_static_run_config
 from pyfireca.data import LandscapeInput
@@ -31,9 +34,15 @@ from pyfireca.workflow import StaticRunArtifacts, run_static_config, validate_st
 
 __all__ = [
     "ConstantDirectionalSpreadRate",
+    "CruzCrownFireModel",
+    "CruzCrownInputs",
     "DirectionalSpreadRateProvider",
+    "FBPComputation",
+    "FBPInputs",
+    "FBPModel",
     "FireState",
     "HalfCellInterfaceDirectionalSpreadRate",
+    "HomogeneousFBPDirectionalSpreadRate",
     "IgnitionEvent",
     "LandscapeInput",
     "MooreNeighborhood",
