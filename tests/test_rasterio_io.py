@@ -3,7 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pyfireca.gis import RasterMetadata, read_raster, write_raster
+from pyfireca.gis import RasterMetadata, read_raster, write_raster, write_state_raster
+from pyfireca.state import FireState
 
 rasterio = pytest.importorskip("rasterio")
 
@@ -54,6 +55,47 @@ def test_written_geotiff_reopens_with_expected_geometry(tmp_path: Path) -> None:
         assert dataset.nodata == 255
         assert dataset.transform.a == pytest.approx(30.0)
         assert dataset.transform.e == pytest.approx(-30.0)
+
+
+def test_state_raster_uses_canonical_uint8_states_without_file_nodata(tmp_path: Path) -> None:
+    path = tmp_path / "fire_state.tif"
+    state = np.array(
+        [
+            [FireState.UNBURNABLE, FireState.UNBURNED, FireState.BURNING, FireState.BURNED],
+            [FireState.UNBURNED, FireState.UNBURNED, FireState.BURNED, FireState.UNBURNABLE],
+            [FireState.BURNING, FireState.BURNED, FireState.UNBURNED, FireState.UNBURNABLE],
+        ],
+        dtype=np.int16,
+    )
+
+    write_state_raster(path, state, _metadata())
+
+    with rasterio.open(path) as dataset:
+        loaded = dataset.read(1)
+        assert loaded.dtype == np.uint8
+        assert dataset.nodata is None
+        assert np.array_equal(loaded, state.astype(np.uint8))
+        assert dataset.crs.to_string() == "EPSG:32650"
+
+
+def test_state_raster_rejects_invalid_states_and_shape(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unsupported"):
+        write_state_raster(
+            tmp_path / "invalid_state.tif",
+            np.array([[99]], dtype=np.int16),
+            RasterMetadata(
+                shape=(1, 1),
+                crs="EPSG:32650",
+                transform=(30.0, 0.0, 500000.0, 0.0, -30.0, 3600000.0),
+            ),
+        )
+
+    with pytest.raises(ValueError, match="does not match"):
+        write_state_raster(
+            tmp_path / "wrong_shape_state.tif",
+            np.ones((2, 2), dtype=np.uint8),
+            _metadata(),
+        )
 
 
 def test_read_raster_rejects_missing_crs(tmp_path: Path) -> None:
