@@ -7,9 +7,9 @@ before raster data enter a simulation.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import hypot, isclose, isfinite
-from typing import Mapping
 
 AffineTuple = tuple[float, float, float, float, float, float]
 
