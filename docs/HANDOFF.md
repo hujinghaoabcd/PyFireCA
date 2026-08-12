@@ -4,11 +4,11 @@
 >
 > Purpose: allow the next development session or contributor to continue immediately without reconstructing design context from chat history.
 
-## 1. Project identity
+## 1. Project identity and protected scope
 
 Repository: `hujinghaoabcd/PyFireCA`
 
-PyFireCA is a **wildfire cellular-automata research framework**. Urban CA projects are engineering/GIS references only; they are not supported simulation domains.
+PyFireCA is a **wildfire cellular-automata research framework**. UrbanVCA / PLUS / intPLUS / Mesa-Geo are engineering/GIS references only; they are not supported simulation domains.
 
 Primary research interest: **modify and study the CA itself**.
 
@@ -23,54 +23,24 @@ Time stepping / scheduler
 
 Fire behavior and GIS support the CA but do not define the simulation engine.
 
-## 2. Scope decisions that should not be casually reversed
+Do not casually reverse these decisions without updating `docs/DESIGN.md` and explaining the scientific/engineering reason:
 
-1. PyFireCA is wildfire-specific.
-2. UrbanVCA / PLUS / intPLUS / Mesa-Geo inform engineering only.
-3. PyTorchFire-style differentiable CA, Torch/JAX, and GPU backends are deferred.
-4. Level Set and front tracking remain comparison methods, not core propagation engines.
-5. NumPy remains the readable scientific reference implementation.
-6. Numba is introduced only after profiling.
-7. Fire behavior and CA propagation remain separate.
-8. GIS file I/O remains outside numerical kernels.
-9. The package tree stays compact until real complexity justifies splitting it.
-10. Design/status/handoff/validation documents are maintained continuously.
-11. Behavior outputs are standardized; model-native Rothermel/FBP inputs remain strongly typed and model-specific.
-12. Physical weather time interpolation is deferred until a concrete data integration exists.
-13. Rothermel is the first behavior reference implementation; FBP remains required later for Cell2Fire-oriented comparisons.
-14. Rothermel legacy-unit conversion is centralized rather than duplicated inside equation functions.
-15. R1 heterogeneous-fuel weighting/base quantities are independently testable and remain separate from the R2 reaction/heat-transfer chain.
-16. R2 follows an explicitly documented Albini-adjusted Rothermel operational line rather than an unlabelled mixture of 1972 and later formulas.
+1. wildfire-specific product scope;
+2. NumPy is the readable scientific reference path;
+3. Numba only after profiling;
+4. PyTorch/JAX/GPU/differentiable CA deferred;
+5. Level Set/front tracking are comparison methods only;
+6. fire behavior and CA propagation stay separate;
+7. GIS file I/O stays outside numerical kernels;
+8. compact package tree until real complexity justifies splitting;
+9. behavior outputs standardized, model-native inputs strongly typed/model-specific;
+10. Rothermel first, FBP later for Cell2Fire-oriented comparison;
+11. Rothermel public contract uses SI units and explicit midflame wind;
+12. R1 base calculations stay separate from R2 reaction/heat-transfer equations;
+13. R2 follows a named **Albini-adjusted Rothermel** line;
+14. external numerical references carry explicit evidence grades and pinned provenance.
 
-The Rothermel-first choice is a sequencing decision, not a claim that Rothermel is universally preferable to FBP.
-
-## 3. Reference-project lessons
-
-### Cell2Fire
-
-Use for cell-based wildfire propagation, ROS-driven cell-to-cell spread, distance/ellipse concepts, and Monte Carlo landscape experiments. Do not copy its architecture wholesale.
-
-### SimFire
-
-Use for Python simulation organization and as an independent Rothermel comparison path. Avoid coupling rendering/game concerns to numerical kernels.
-
-### GridFire
-
-Use for raster wildfire organization, Monte Carlo/scenario ideas, richer wildfire processes, and later performance comparisons.
-
-### Pyretechnics
-
-Use for modular fire-behavior organization, six-class fuel representation ideas, surface/crown/spot separation, and an independent Rothermel comparison path. Do **not** adopt its Level Set engine. Do not copy its EPL-licensed source into PyFireCA; implement published equations independently.
-
-### ELMFIRE / ForeFire
-
-Non-CA comparison baselines only.
-
-### UrbanVCA / PLUS / intPLUS / Mesa-Geo
-
-Engineering references for GIS preprocessing, raster contracts, CI, documentation, and modern project organization only.
-
-## 4. Current implemented source tree
+## 2. Current implemented tree
 
 ```text
 src/pyfireca/
@@ -88,7 +58,7 @@ src/pyfireca/
     └── rothermel.py
 ```
 
-Tests:
+Core tests plus validation assets now include:
 
 ```text
 tests/
@@ -101,14 +71,21 @@ tests/
 ├── test_rothermel_r1.py
 ├── test_rules.py
 ├── test_simulation.py
-└── test_state.py
+├── test_state.py
+└── validation/
+    ├── README.md
+    ├── test_albini1976_fixture.py
+    ├── test_behave7_fixture.py
+    └── data/
+        ├── albini1976_worked_examples.csv
+        └── behave7_surface_reference.csv
 ```
 
-Do not create empty `gis.py`, `config.py`, `metrics.py`, `fbp.py`, or additional packages merely to match an architecture diagram. Add them when their milestone starts.
+Do not create empty `gis.py`, `config.py`, `metrics.py`, `fbp.py`, or plugin/backend packages merely to match an architecture diagram.
 
-## 5. CA core truth
+## 3. CA core truth
 
-### Fire state
+### State
 
 ```text
 UNBURNABLE = 0
@@ -117,96 +94,51 @@ BURNING    = 2
 BURNED     = 3
 ```
 
-State arrays are validated as two-dimensional integer arrays.
-
-### Raster grid
-
-`RasterGrid` owns the state array, shape, optional positive `cell_size`, safe state replacement, and independent copy. CRS/transform metadata are not implemented yet.
-
-### Neighborhoods
+### Grid / neighborhood
 
 Implemented:
 
-```text
-Neighborhood protocol
-MooreNeighborhood
-VonNeumannNeighborhood
-valid_neighbor_indices
-```
-
-Current edge policy is clipping.
+- `RasterGrid`;
+- `Neighborhood` protocol;
+- `MooreNeighborhood`;
+- `VonNeumannNeighborhood`;
+- `valid_neighbor_indices()`;
+- clipped edge semantics.
 
 ### Transition semantics
 
 `TransitionRule.next_state(grid, *, rng)` reads the current full state and returns a complete next-state array. `Simulation` applies it only after rule evaluation finishes.
 
-This makes the reference engine explicitly **synchronous**. Newly ignited cells cannot propagate again in the same step.
+The reference engine is therefore explicitly **synchronous**; newly ignited cells do not propagate again in the same step.
 
-### Reference rule
+`NeighborIgnitionRule` is an architectural baseline only and contains no physical fire behavior.
 
-`NeighborIgnitionRule` is an architectural baseline only. It contains no physical fire behavior.
+## 4. Common behavior/data contract
 
-## 6. Common fire-behavior contract
-
-`src/pyfireca/behavior/base.py` implements:
-
-```text
-FireBehaviorModel[InputT]
-FireBehaviorResult
-```
-
-Common result fields:
+`FireBehaviorResult` provides the stable CA-facing output:
 
 ```text
 spread_rate_m_s            required
-spread_direction_deg       optional
+spread_direction_deg       optional, [0, 360), clockwise from north
 fireline_intensity_w_m     optional
 flame_length_m              optional
 diagnostics                 optional model-specific scalar mapping
 ```
 
-Direction convention:
+`FireBehaviorModel[InputT]` deliberately leaves the input type model-specific.
+
+`SpatialLayer` supports:
 
 ```text
-0°   north
-90°  east
-180° south
-270° west
+static   (Y, X)
+dynamic  (T, Y, X)
 ```
 
-Angles increase clockwise and must satisfy `[0, 360)`.
+with optional units/NoData metadata. `EnvironmentalData` requires shared spatial shape and dynamic time length. Physical datetime interpolation, CRS/affine metadata, masking, xarray, and Zarr remain deferred until concrete requirements arise.
 
-The stable interchange boundary is the **result**. Do not replace the generic model input type with a giant all-model input dataclass.
+## 5. Rothermel input contract
 
-## 7. Environmental data contract
-
-`src/pyfireca/data.py` implements:
-
-```text
-SpatialLayer
-EnvironmentalData
-```
-
-`SpatialLayer` supports static `(Y, X)` and dynamic `(T, Y, X)` arrays with optional `units` and `nodata` metadata.
-
-`EnvironmentalData` requires one shared spatial shape and one shared dynamic time length. `snapshot(t)` returns aligned 2-D arrays.
-
-Intentional current limitations:
-
-- integer time index only;
-- no datetime interpolation;
-- no CRS/affine metadata in `SpatialLayer`;
-- NoData is metadata only;
-- no hidden masking/imputation;
-- no xarray/Zarr abstraction.
-
-Detailed rules: `docs/BEHAVIOR_DATA_CONTRACT.md`.
-
-## 8. Rothermel input contract
-
-### Fuel class order
-
-The public six-class order is fixed and must not be reordered:
+Fixed six-class order:
 
 ```text
 0 DEAD_1H
@@ -217,9 +149,7 @@ The public six-class order is fixed and must not be reordered:
 5 LIVE_WOODY
 ```
 
-### `RothermelFuelModel`
-
-Public SI fields:
+`RothermelFuelModel` SI fields:
 
 ```text
 code
@@ -235,20 +165,7 @@ dynamic
 burnable
 ```
 
-Validation rules:
-
-- positive integer code;
-- finite/non-negative quantities;
-- mineral fractions in `[0, 1]`;
-- burnable model requires positive depth, extinction moisture, and total load;
-- loaded classes require positive SAV ratio, heat content, and particle density;
-- nonburnable models may use zeros.
-
-The dataclass is not yet tied to an Anderson or Scott--Burgan catalogue.
-
-### `RothermelFuelMoisture`
-
-External moisture inputs:
+`RothermelFuelMoisture` external inputs:
 
 ```text
 dead_1h_fraction
@@ -258,9 +175,7 @@ live_herbaceous_fraction
 live_woody_fraction
 ```
 
-`as_six_class_values()` currently assigns dead-herbaceous moisture from dead 1-h moisture. Live moisture may exceed 1.0 on a dry-mass basis. Dynamic herbaceous load transfer is not implemented yet.
-
-### `RothermelInputs`
+`RothermelInputs`:
 
 ```text
 fuel
@@ -271,17 +186,11 @@ slope_deg
 aspect_deg
 ```
 
-Important conventions:
+Wind direction is meteorological **from** direction. 10-m/20-ft → midflame adjustment belongs outside the core Rothermel input contract.
 
-- wind speed is **midflame** wind;
-- `wind_from_direction_deg` is meteorological from-direction;
-- slope is `[0, 90)` degrees;
-- aspect is clockwise from geographic north;
-- 10-m/20-ft wind adjustment does not belong inside the core Rothermel input contract.
+## 6. R1 implementation — stable baseline
 
-## 9. R1 unit-conversion layer
-
-`src/pyfireca/behavior/_units.py` centralizes exact public-SI ↔ published/native conversions used by the reference path:
+`behavior/_units.py` centralizes tested conversions:
 
 ```text
 m ↔ ft
@@ -292,13 +201,7 @@ J/kg ↔ Btu/lb
 m/s ↔ ft/min
 ```
 
-The constants are explicitly named and round-trip tested in `tests/test_behavior_units.py`.
-
-Do not reintroduce raw conversion constants inside future equation functions.
-
-## 10. R1 heterogeneous-fuel/base calculations
-
-`src/pyfireca/behavior/rothermel.py` now contains these scientific functions in addition to input dataclasses:
+Implemented scientific R1 functions:
 
 ```text
 compute_surface_area_weights
@@ -308,20 +211,13 @@ compute_bulk_density_kg_m3
 compute_optimum_packing_ratio
 ```
 
-### Surface-area weights
-
-Per-class relative surface area is proportional to:
+The heterogeneous-fuel surface-area measure is proportional to:
 
 ```text
 SAV × oven-dry load / particle density
 ```
 
-The function returns:
-
-- six within-category weights (`f_ij`-like dead/live size-class weights);
-- two dead/live category weights (`f_i`-like weights).
-
-`tests/test_rothermel_r1.py` uses a synthetic three-loaded-class fuel model with hand-computable weights:
+The hand-computable synthetic regression fixture locks:
 
 ```text
 dead 1-h within dead = 1/3
@@ -329,135 +225,151 @@ dead 10-h within dead = 2/3
 live herb within live = 1
 dead category = 3/7
 live category = 4/7
+characteristic SAV = 300 1/m
+packing ratio = 0.003
+bulk density = 3 kg/m³
 ```
 
-This fixture is intentionally independent of SimFire/Pyretechnics outputs.
+R1 code baseline commit `793c393` is fully green across Ruff, quality pytest, and Python 3.11/3.12/3.13.
 
-### Characteristic SAV
+Do not redesign R1 simply to make R2 implementation shorter.
 
-Uses the same within-category and category surface-area weights. The synthetic fixture expects `300 1/m`.
+## 7. R2 reference variant — fixed
 
-### Packing ratio
+PyFireCA's R2 target is **Albini-adjusted Rothermel surface fire**, not an unlabelled mixture of 1972 and later formulas.
 
-Computed as particle-volume-per-bed-volume:
+Albini 1976 changes already locked into the design:
+
+1. combustible loading: `W0 * (1 - S_T)` rather than `W0 / (1 + S_T)`;
+2. reaction-velocity exponent: `A = 133 * sigma^-0.7913`;
+3. revised exponentially weighted live moisture-of-extinction calculation, bounded below by dead moisture of extinction;
+4. dead and live reaction intensities are added rather than final-combined by the earlier category surface-area weighted average.
+
+Andrews 2018 is the modern consistency reference because it explicitly describes operational Rothermel use with Albini 1976 adjustments.
+
+## 8. Validation evidence policy
+
+`docs/VALIDATION.md` now defines:
 
 ```text
-sum(load / particle_density) / fuel-bed depth
+Grade A  primary/authoritative worked value
+Grade B  official operational software regression
+Grade C  independent implementation comparison
+Grade D  internal synthetic/analytical fixture
 ```
 
-Synthetic fixture expects `0.003`.
+Rules:
 
-### Bulk density
+- a Grade C implementation never becomes scientific truth merely because it agrees with another package;
+- when references disagree, resolve equation variant/units/conventions first;
+- never weaken tolerances to hide a formulation mismatch;
+- external fixtures record provenance and are protected from accidental edits.
 
-Computed as total oven-dry load / fuel-bed depth. Synthetic fixture expects `3 kg/m³`.
+## 9. Pinned validation fixtures
 
-### Optimum packing ratio
+### Grade A — Albini 1976
 
-The SI characteristic SAV is explicitly converted to inverse feet before applying the published legacy-unit correlation. Zero returns zero; negative characteristic SAV raises.
+`tests/validation/data/albini1976_worked_examples.csv`
 
-## 11. R2 reference variant — Albini-adjusted Rothermel
+Source: Albini 1976, USDA Forest Service GTR INT-30, worked examples.
 
-The next scientific stage is **not** just “copy the rest of Rothermel”.
-
-Albini 1976 explicitly documents significant modifications to the Rothermel 1972 computation path used in FIREMODS-based fire-behavior calculations:
-
-1. combustible fuel loading uses `W0 * (1 - S_T)` rather than `W0 / (1 + S_T)`;
-2. the reaction-velocity exponent is replaced by `A = 133 * sigma^-0.7913` to avoid divergence of the original expression;
-3. live moisture of extinction uses a revised exponentially weighted fine-fuel calculation and is bounded below by dead-fuel moisture of extinction rather than a fixed 0.3;
-4. dead and live reaction intensities are added rather than combined by the earlier category surface-area weighted average.
-
-Andrews 2018 explicitly describes the operational Rothermel surface-fire model as using adjustments by Albini in 1976 and consolidates the associated equations.
-
-Therefore PyFireCA's R2 target is now explicitly the **Albini-adjusted Rothermel surface-fire reference**. This avoids silently mixing 1972 and later operational formulas.
-
-Authoritative numerical fixtures are still required before the complete no-wind/no-slope ROS chain is accepted.
-
-## 12. Scientific source / provenance rule
-
-Primary source path:
-
-1. Rothermel 1972, USDA Forest Service Research Paper INT-115;
-2. Albini 1976, USDA Forest Service GTR INT-30 where applicable;
-3. Andrews 2018, USDA Forest Service RMRS-GTR-371;
-4. Scott & Burgan 2005, USDA Forest Service RMRS-GTR-153 for later fuel catalogues.
-
-SimFire and Pyretechnics are independent numerical comparison paths, not code sources to copy.
-
-When implementations disagree, return to primary scientific references, document the interpretation, and add a regression/reference test.
-
-Detailed plan: `docs/ROTHERMEL_REFERENCE.md`.
-
-## 13. CI / engineering state
-
-GitHub Actions runs:
+Pinned outputs:
 
 ```text
-Ruff lint
-Ruff format --check
-pytest + coverage
-Python 3.11 pytest
-Python 3.12 pytest
-Python 3.13 pytest
+Example 1
+fuel model 3
+fuel moisture 5%
+20-ft wind 8 mi/h
+level ground
+→ spread rate 97 chains/hour
+→ flame length 12.5 ft
+
+Example 2
+fuel model 2
+fine dead moisture 8%
+live foliage about 50%
+calm wind
+70% slope
+→ spread rate 34 chains/hour
+→ flame length 6.2 ft
 ```
 
-The R1 code baseline at commit `793c393` is fully green: Ruff lint, Ruff format, the quality pytest run, and Python 3.11/3.12/3.13 tests all pass. Earlier red runs in this development pass were style-only and are superseded by that verified baseline.
+These are future R3/R4 whole-model validation cases. They are **not** R2 fixtures because neither has both wind and slope equal to zero.
 
-Engineering files already present:
+### Grade B — official Behave 7
+
+`tests/validation/data/behave7_surface_reference.csv`
+
+Pinned provenance:
 
 ```text
-.github/workflows/ci.yml
-.pre-commit-config.yaml
-.gitignore
-pyproject.toml
-CITATION.cff
-CHANGELOG.md
-CONTRIBUTING.md
-README.md
-README.zh-CN.md
+repository: firelab/behave-app
+commit: a3cfcd5903188d73445948af16644868225bb9d5
+source: behave-lib/test/csv/surface.csv
+source blob: 975000d8dc3def0f25a22df0777e4ab70016c996
+validator: behave-lib/test/cpp/testSurface.cpp
 ```
 
-RepoForge migration remains intentionally deferred. When applied, use `scientific-python / standard` with managed README sections and preserve the hand-written scientific body.
+The official validator retrieves spread rate in `ChainsPerHour` and checks expected values with `1e-6` tolerance.
 
-## 14. Performance contract
+Both external snapshots have SHA-based integrity tests.
 
-Do not start C++, Cython, CUDA, Torch, or JAX.
+## 10. Current R2 validation gap
 
-```text
-readable NumPy reference
-      ↓
-scientific/reference tests
-      ↓
-profiling
-      ↓
-Numba for measured hotspots only
-```
+A precise tabulated **zero-wind AND zero-slope** external worked value matching the selected Albini-adjusted R2 formulation has not yet been located.
 
-Keep the NumPy path after optimization for equivalence testing.
+Known candidates are insufficient for this exact gate:
 
-## 15. Exact next implementation target
+- Albini Example 1: level ground but nonzero wind;
+- Albini Example 2: calm wind but nonzero slope;
+- Rothermel 1972 includes no-wind theory and graphical curves, but graph reading is not precise enough for a high-accuracy regression constant;
+- current official Behave 7 regression CSV has whole-surface cases but no dedicated zero-wind/zero-slope case.
 
-Do **not** redesign the R1 input/weighting contract and do **not** jump to Cell2Fire-like propagation yet.
+**Do not fabricate an A-grade fixture from PyFireCA's own equations.**
+
+If no suitable Grade A worked value exists, the acceptable fallback is to generate a **Grade B** zero-wind/zero-slope case from a pinned official Behave 7 build, record the exact build/input/output provenance, and keep it labeled Grade B.
+
+## 11. CI state at this handoff
+
+The R1 baseline is fully green.
+
+The new validation infrastructure is running through the same CI. At the last check of run `31560693835`:
+
+- Ruff lint: success;
+- Ruff format: success;
+- Python 3.13: success;
+- Python 3.11 test step: success, workflow cleanup still completing;
+- quality pytest: in progress;
+- Python 3.12: still starting.
+
+A preceding fixture-document run completed successfully. If the next session begins after CI completion, inspect the newest run and update this section rather than assuming failure/success.
+
+## 12. Exact next implementation target
+
+Do **not** jump to Cell2Fire-like propagation or wind/slope equations yet.
 
 Next sequence:
 
 ```text
-R2a lock Albini-adjusted equations in documentation
+R2b finish external fixture strategy
  ↓
-R2b create authoritative numerical fixtures
+if needed, generate pinned Grade B zero-wind+zero-slope Behave 7 case
  ↓
-R2c implement formula-level pure functions
+R2c implement small Albini-adjusted pure functions
  ↓
 R2d assemble validated no-wind/no-slope ROS
 ```
 
-The formula-level functions expected after the reference-variant decision include:
+Planned R2c functions:
 
 ```text
 combustible/net fuel loading
 mineral damping
 moisture damping
 live moisture of extinction
-reaction velocity/intensity
+Albini reaction-velocity exponent
+maximum/actual reaction velocity
+dead/live reaction intensity
 propagating flux ratio
 effective heating number
 heat of preignition
@@ -465,47 +377,34 @@ heat source/sink
 base ROS
 ```
 
-Only after R2 is independently validated should the project proceed to wind/slope, common `FireBehaviorResult`, or behavior-informed CA propagation.
+Each function gets source/equation provenance and direct tests before the full ROS chain is assembled.
 
-## 16. Open questions
+## 13. Later work — do not pull forward prematurely
 
-Resolved:
+After validated R2:
 
-- common behavior result fields/units;
-- direction convention;
-- static/dynamic in-memory layer shape;
-- model-specific input policy;
-- first behavior family: Rothermel;
-- six-class Rothermel fuel representation;
-- midflame wind as core behavior input;
-- explicit central unit-conversion layer;
-- R1 surface-area weighting, characteristic SAV, packing ratio, bulk density, and optimum packing ratio;
-- R2 reference line: Albini-adjusted Rothermel rather than unlabelled mixing of original/revised formulas.
+```text
+R3  wind + slope
+R4  RothermelModel.compute() → FireBehaviorResult
+R5  verified Anderson/Scott-Burgan catalogues
+E   first behavior-informed CA rule
+F   FBP + Cell2Fire-like distance accumulation
+G   Monte Carlo / crown / spotting / suppression
+H   profiling-led Numba
+```
 
-Still open:
+Open later design questions include physical weather timestamps, GIS NoData execution policy, sparse/active-cell transitions, asynchronous scheduling, Cell2Fire distance state, GeoTIFF arrival-time conventions, and Monte Carlo RNG stream strategy.
 
-1. authoritative numerical fixtures for the Albini-adjusted R2 chain;
-2. exact implementation decomposition for live moisture of extinction;
-3. dynamic herbaceous curing implementation;
-4. physical weather timestamps/interpolation;
-5. sparse vs full-array CA transitions after profiling;
-6. asynchronous/event-driven scheduler architecture;
-7. extra propagation state for Cell2Fire-like distance accumulation;
-8. GeoTIFF/NoData conventions for state and arrival-time outputs;
-9. Monte Carlo RNG stream strategy.
+## 14. Handoff discipline
 
-Any resolved scientific item must be documented before or with code.
-
-## 17. Handoff checklist
-
-At the end of every development session this file must answer:
+Every development session must leave this file answering:
 
 - what changed;
 - what tests/CI pass;
-- what is incomplete;
-- what scientific assumptions were introduced;
+- what remains incomplete;
+- what scientific assumptions/variants are active;
 - what design decisions were made;
-- what exact module/function comes next;
+- what exact file/function comes next;
 - what must not be changed accidentally.
 
 The handoff describes repository truth, not planned work that was never implemented.
