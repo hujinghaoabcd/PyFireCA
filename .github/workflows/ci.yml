@@ -83,6 +83,31 @@ jobs:
           python -m build
           ls -lh dist/
 
+      - name: Verify MIT metadata and license files in distributions
+        run: |
+          python - <<'PY'
+          import glob
+          import tarfile
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+              metadata_name = next(name for name in names if name.endswith(".dist-info/METADATA"))
+              metadata = archive.read(metadata_name).decode("utf-8")
+              assert "License-Expression: MIT" in metadata
+              assert any(
+                  ".dist-info/licenses/" in name and name.endswith("/LICENSE")
+                  for name in names
+              )
+
+          sdist = glob.glob("dist/*.tar.gz")[0]
+          with tarfile.open(sdist, "r:gz") as archive:
+              assert any(name.endswith("/LICENSE") for name in archive.getnames())
+
+          print("MIT license metadata and files verified in wheel and sdist")
+          PY
+
       - name: Clean-install built wheel and exercise console script
         run: |
           python -m venv .venv-wheel
