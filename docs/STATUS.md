@@ -2,11 +2,11 @@
 
 > Updated: 2026-08-12
 >
-> Current milestone: **R7 — validated directional Rothermel-to-arrival coupling**
+> Current milestone: **R8 — static spatial raster Rothermel coupling**
 
 ## Current position
 
-PyFireCA now has eight working foundations:
+PyFireCA now has nine working foundations:
 
 ```text
 1. Wildfire CA reference core
@@ -17,31 +17,38 @@ PyFireCA now has eight working foundations:
 6. Audited standard-fuel catalogue subset
 7. Static physical travel-time / arrival-time propagation
 8. Behave-aligned surface ellipse → directional neighbor ROS → arrival coupling
+9. Static spatial raster layers → typed per-cell Rothermel → heterogeneous arrival
 ```
 
-Current scientific path:
+Current implemented path:
 
 ```text
-fuel + moisture + wind + slope
-              ↓
-     RothermelModel.compute()
-              ↓
- maximum ROS + maximum direction
-              ↓
-  Behave/Catchpole surface ellipse
-              ↓
-FromIgnitionPoint directional ROS
-              ↓
-north-up neighbor edge bearing
-              ↓
-     physical distance / ROS
-              ↓
-       earliest arrival time
-              ↓
-  physical-time FireState snapshot
+aligned raster layers
+        ↓
+SpatialLayer / EnvironmentalData
+        ↓
+LandscapeInput
+        ↓
+StaticRasterRothermelInputsProvider
+        ↓
+per-source-cell RothermelInputs
+        ↓
+StaticSpatialRothermelDirectionalSpreadRate
+        ↓
+RothermelModel + Behave/Catchpole surface ellipse
+        ↓
+direction-specific outgoing neighbor ROS
+        ↓
+physical edge distance / ROS
+        ↓
+StaticArrivalTimeSolver
+        ↓
+earliest arrival time
+        ↓
+physical-time FireState snapshot
 ```
 
-This path is now implemented end to end for a static homogeneous Rothermel environment. The next major engineering/science gap is **spatially heterogeneous static behavior inputs**, followed later by affine-aware geometry and truly time-dependent weather.
+The static GIS-to-arrival path is now implemented end to end for north-up square metric rasters. The next scientific CA boundary is no longer basic Rothermel or GIS assembly; it is controlled comparison of **edge coupling, neighborhood/grid discretization, and lattice bias**, followed later by an explicitly designed time-dependent weather scheduler.
 
 ## Completed foundations
 
@@ -56,7 +63,7 @@ This path is now implemented end to end for a static homogeneous Rothermel envir
 - `build_initial_state(domain_mask, ignition_mask)`;
 - synchronous no-cascade regression tests.
 
-The original synchronous `Simulation` remains unchanged. One CA step still has no hidden physical duration.
+The original synchronous `Simulation` remains unchanged. One CA step has no hidden physical duration.
 
 ### Behavior/data/GIS boundary
 
@@ -143,7 +150,7 @@ Implemented:
 - non-collinear wind/slope vector composition;
 - explicit wind-from/downwind and aspect/upslope direction conversions.
 
-When wind limiting is enabled and exceeded, `effective_wind_speed_m_s` now reports the **limited** effective wind, matching the Behave operational path. This is required before computing the fire ellipse.
+When wind limiting is enabled and exceeded, `effective_wind_speed_m_s` reports the **limited** effective wind, matching the Behave operational path and keeping ellipse shape consistent with the capped wind.
 
 ### R4 — public model assembly — complete
 
@@ -236,8 +243,6 @@ row +1 → south
 col -1 → west
 ```
 
-Rotated/sheared rasters require a later affine-aware adapter.
-
 `StaticArrivalTimeSolver` performs Dijkstra-style earliest-arrival propagation for static non-negative edge travel times.
 
 `arrival_times_to_state(..., time_s, burn_duration_s)` maps arrival fields to canonical `FireState` snapshots.
@@ -260,21 +265,10 @@ Then:
 e = sqrt((L/W)^2 - 1) / (L/W)
 R_back = R_head * (1 - e) / (1 + e)
 R_flank = (R_head + R_back) / (2 * L/W)
-```
-
-The pinned Behave `FromIgnitionPoint` path reduces the Catchpole-style ellipse to:
-
-```text
 R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
 ```
 
-where `beta=0°` is heading and `beta=180°` is backing.
-
-Implemented in:
-
-```text
-src/pyfireca/behavior/_surface_ellipse.py
-```
+The last expression is the pinned Behave `FromIgnitionPoint` path used for radial arrival propagation.
 
 ### Grade B off-axis reference
 
@@ -302,55 +296,119 @@ Official full-precision Behave result:
 0.02921246024622574 m/s
 ```
 
-The strengthened workflow requires:
-
-```text
-raw value match
-Total tests performed: 172
-Total tests passed:    172
-Total tests failed:    0
-```
-
-Therefore the 90° off-axis radial ROS is Grade B.
+The hardened workflow requires the raw value plus `172 passed / 0 failed`.
 
 ### Homogeneous directional provider
 
-Public behavior API now includes:
+`HomogeneousRothermelDirectionalSpreadRate` evaluates one static Rothermel state, caches its behavior and ellipse, converts north-up raster offsets to bearings, and returns the Behave-style radial ROS.
 
-```text
-HomogeneousRothermelDirectionalSpreadRate
-```
-
-It evaluates one static homogeneous `RothermelInputs`, caches its maximum behavior and ellipse, converts each north-up raster neighbor offset to a geographic bearing, and returns the Behave-style `FromIgnitionPoint` radial ROS for that edge.
-
-Verified FM1 100 ft/min behavior:
+Verified FM1 100 ft/min values:
 
 ```text
 east  / head      0.04936592733340002 m/s
-north / south     0.02921246024622574 m/s  ← Grade B 90°
+north / south     0.02921246024622574 m/s
 west  / backing   0.02074385430924511 m/s
 NE/SE / 45°       0.041067604539224284 m/s
 ```
 
-The diagonal tests explicitly verify ellipse directional ROS rather than `head_ROS*cos(theta)`.
+Diagonal spread follows the ellipse; no `head_ROS*cos(theta)` shortcut is used.
 
-### First full anisotropic arrival coupling
+## R8 — static spatial raster coupling — implemented baseline
 
-End-to-end tests now exercise:
+### Per-source-cell heterogeneous behavior
+
+`StaticSpatialRothermelDirectionalSpreadRate` accepts:
 
 ```text
-FM1 Rothermel
-→ maximum spread behavior
-→ effective-wind ellipse
-→ neighbor bearing
-→ directional edge ROS
-→ edge travel time
+inputs_provider(row, col) -> RothermelInputs
+```
+
+and caches one Rothermel behavior/ellipse state per evaluated source cell.
+
+The baseline edge semantic is explicit:
+
+> **The source cell determines the outgoing edge ROS.**
+
+No source/target averaging is hidden inside the provider. Alternative interface rules are future CA variants and must be implemented separately.
+
+Tests verify that when wind direction changes between adjacent source cells, the first edge can use head ROS while the next edge uses backing ROS. Earliest-arrival propagation therefore re-evaluates behavior by source cell rather than reusing one landscape-wide state.
+
+### Static raster input adapter
+
+Public API:
+
+```text
+RothermelRasterLayerNames
+StaticRasterRothermelInputsProvider
+```
+
+Default layers and exact units:
+
+```text
+fuel_model                   code / None
+dead_1h_moisture             fraction
+dead_10h_moisture            fraction
+dead_100h_moisture           fraction
+live_herbaceous_moisture     fraction
+live_woody_moisture          fraction
+midflame_wind_speed          m/s
+wind_from_direction          deg
+slope                        deg
+aspect                       deg
+```
+
+The adapter never silently converts percent moisture, percent slope, 10-m wind, radians, or wind-height definitions.
+
+Only `domain_mask=True` cells are required to have complete Rothermel data. NoData outside the domain is legal; NoData/non-finite values inside the domain fail fast.
+
+Fuel codes must be integer-like and present in the audited catalogue.
+
+### Landscape convenience factory
+
+Public API:
+
+```text
+build_static_raster_rothermel_arrival_solver(...)
+```
+
+This thin factory assembles:
+
+```text
+LandscapeInput
+→ StaticRasterRothermelInputsProvider
+→ StaticSpatialRothermelDirectionalSpreadRate
 → StaticArrivalTimeSolver
 ```
 
-On an east-west line, the east head-fire neighbor arrives before the west backing-fire neighbor. On a north-south line, arrival time uses the pinned Grade B 90° off-axis ROS.
+It does not infer ignition, solve automatically, interpolate weather, or write outputs.
 
-This is the first physically timed anisotropic propagation path in PyFireCA.
+Current geometry is deliberately fail-closed:
+
+```text
+north-up only
+square pixels only
+positive x / negative y affine steps
+explicit cell_size_m
+cell_size_m must match affine pixel size
+```
+
+The caller explicitly asserts metric cell size because lightweight `RasterMetadata` does not parse CRS linear units.
+
+Rotated, sheared, rectangular, or affine/cell-size-mismatched grids are rejected rather than approximated silently.
+
+### Example workflow
+
+```text
+examples/static_raster_rothermel.py
+```
+
+The file-free example builds a 5×7 aligned environment, runs static Rothermel directional arrival, then converts the arrival field to a physical-time `FireState` snapshot. A smoke test executes the example so future API changes cannot silently break it.
+
+Detailed contract:
+
+```text
+docs/STATIC_RASTER_WORKFLOW.md
+```
 
 ## Validation provenance
 
@@ -384,16 +442,7 @@ External workflows:
 
 ## CI state
 
-Functional suites covering R1–R7, dynamic GR1, fuel catalogue, GIS, ellipse directional spread, travel time, arrival time, and state snapshots pass across:
-
-```text
-Python 3.11  ✓
-Python 3.12  ✓
-Python 3.13  ✓
-GIS          ✓
-```
-
-The R7 pinned directional workflow is green. Use the latest post-format all-green main run as the canonical CI baseline.
+Functional suites covering R1–R8, dynamic GR1, fuel catalogue, GIS, directional ellipse, physical travel/arrival, spatial raster adapters, landscape factory, and example workflow pass across the supported Python/GIS matrix in the latest functional runs. The canonical baseline remains the latest all-green post-format run; do not reinterpret a Ruff-only failure as a scientific regression.
 
 ## Key decisions now fixed
 
@@ -403,32 +452,44 @@ The R7 pinned directional workflow is green. Use the latest post-format all-gree
 4. Maximum/head ROS is never silently assigned to all neighbors.
 5. Surface off-axis ROS uses the pinned Behave/Catchpole `FromIgnitionPoint` ellipse path.
 6. `FromPerimeter` directional rates are not used for ignition-point arrival propagation.
-7. Ellipse L/W uses effective wind; if wind limiting is active, it uses the limited effective wind.
-8. North-up raster offset bearings are explicit; rotated/sheared grids need an affine-aware adapter.
-9. The current Rothermel directional provider uses **source-cell behavior** for each outgoing edge.
-10. The current provider is static/homogeneous; time-dependent weather is not approximated as static without an explicit decision.
-11. Dynamic curing remains a preprocessing redistribution before the shared R1/R2 chain.
-12. Fireline intensity/flame length remain outside validated public outputs.
+7. Ellipse L/W uses effective wind; if wind limiting is active, it uses limited effective wind.
+8. North-up square-grid bearing/distance semantics are explicit.
+9. The current heterogeneous baseline uses **source-cell behavior for outgoing edges**.
+10. Source/target averaging, interface resistance, or other edge coupling are separate model hypotheses.
+11. Static raster units are explicit and never silently converted.
+12. Domain-exterior NoData is allowed; domain-interior required behavior data fail fast.
+13. The current static provider must not be mutated to fake dynamic weather.
+14. Fireline intensity/flame length remain outside validated public outputs.
 
 ## Immediate next target
 
-The off-axis science gate is now resolved. Next:
+R8 completes the static GIS-to-arrival baseline. The next work should now emphasize CA research rather than adding generic infrastructure:
 
 ```text
-validated homogeneous anisotropic path                 ✓
+validated fire behavior                            ✓
+validated directional ellipse                      ✓
+static raster heterogeneous arrival                ✓
         ↓
-static spatially heterogeneous Rothermel inputs        NEXT
+controlled CA edge-coupling variants
         ↓
-per-source-cell behavior + ellipse edge provider
+neighborhood / cell-size / lattice-bias experiments
         ↓
-heterogeneous earliest-arrival validation
+spread-shape and arrival-time error metrics
         ↓
-affine-aware distance/bearing for non-square/rotated GIS grids
-        ↓
-time-dependent weather/event scheduling
+only then design time-dependent weather scheduling
 ```
 
-For the first heterogeneous baseline, keep the edge semantic explicit: **outgoing edge ROS is determined by the source cell**. Do not invent source/target averaging until it has a scientific rationale and a separately tested alternative.
+Candidate controlled variants should remain explicit, for example:
+
+```text
+source-cell-controlled edge ROS        current baseline
+source/target interface coupling       future variant
+4-neighbor / 8-neighbor / extended     future experiment
+cell-size sensitivity                  future experiment
+directional grid bias                  future experiment
+```
+
+Do not implement source/target averaging as an invisible tweak to the current provider.
 
 ## Deferred work
 
