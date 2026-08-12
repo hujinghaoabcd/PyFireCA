@@ -156,9 +156,7 @@ def _run_metadata(
             }
             for record in fuel_records
         ],
-        "input_sha256": {
-            name: _sha256_file(path) for name, path in config.inputs.named_paths()
-        },
+        "input_sha256": {name: _sha256_file(path) for name, path in config.inputs.named_paths()},
     }
 
 
