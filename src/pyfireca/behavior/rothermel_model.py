@@ -114,6 +114,8 @@ class RothermelModel:
                 base.characteristic_sav_m_inv,
                 base.relative_packing_ratio,
             )
+            if wind_limit_exceeded:
+                effective_wind_speed = wind_speed_limit
 
         has_directional_effect = wind_factor > 0.0 or slope_factor > 0.0
         spread_direction = None
