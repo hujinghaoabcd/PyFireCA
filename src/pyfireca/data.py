@@ -17,6 +17,10 @@ Array3D = NDArray[np.number]
 BooleanMask = NDArray[np.bool_]
 
 
+class MissingEnvironmentalDataError(ValueError):
+    """Raised when a required environmental snapshot contains unusable cells."""
+
+
 @dataclass(slots=True)
 class SpatialLayer:
     """One static ``(Y, X)`` or dynamic ``(T, Y, X)`` numerical layer.
@@ -156,9 +160,59 @@ class EnvironmentalData:
             raise KeyError(message) from exc
 
     def snapshot(self, time_index: int | None = None) -> dict[str, Array2D]:
-        """Return aligned ``(Y, X)`` arrays for one simulation time index."""
+        """Return aligned ``(Y, X)`` arrays for one simulation time index.
+
+        This generic accessor does not impose missing-data policy. Use
+        :meth:`require_complete_snapshot` when a calculation requires selected
+        layers to be fully usable at one time index.
+        """
 
         return {name: layer.at(time_index) for name, layer in self.layers.items()}
+
+    def require_complete_snapshot(
+        self,
+        layer_names: Iterable[str],
+        *,
+        time_index: int | None = None,
+    ) -> dict[str, Array2D]:
+        """Return selected layers only when the requested snapshot is complete.
+
+        This is the initial fail-fast policy for calculations that require
+        complete environmental inputs. It rejects both declared NoData cells
+        and non-finite numeric values. It does not interpolate, fill, mask, or
+        permanently alter the simulation domain.
+        """
+
+        names = tuple(layer_names)
+        if not names:
+            raise ValueError("at least one required environmental layer must be named")
+        if len(set(names)) != len(names):
+            raise ValueError("required environmental layer names must be unique")
+
+        snapshot: dict[str, Array2D] = {}
+        for name in names:
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("required environmental layer names must be non-empty strings")
+
+            layer = self.layer(name)
+            values = layer.at(time_index)
+            declared_missing = nodata_mask(layer, time_index=time_index)
+            nonfinite = ~np.isfinite(values)
+            missing = declared_missing | nonfinite
+
+            if np.any(missing):
+                total = int(np.count_nonzero(missing))
+                declared_count = int(np.count_nonzero(declared_missing))
+                nonfinite_only = int(np.count_nonzero(nonfinite & ~declared_missing))
+                when = "static snapshot" if not layer.is_dynamic else f"time_index={time_index}"
+                raise MissingEnvironmentalDataError(
+                    f"required layer {name!r} has {total} unusable cells at {when} "
+                    f"({declared_count} declared NoData, {nonfinite_only} additional non-finite)"
+                )
+
+            snapshot[name] = values
+
+        return snapshot
 
 
 def nodata_mask(layer: SpatialLayer, *, time_index: int | None = None) -> BooleanMask:
