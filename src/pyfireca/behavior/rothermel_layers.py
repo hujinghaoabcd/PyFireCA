@@ -151,7 +151,12 @@ class StaticRasterRothermelInputsProvider:
     def __call__(self, row: int, col: int) -> RothermelInputs:
         """Return typed behavior inputs for one in-domain source cell."""
 
-        if isinstance(row, bool) or isinstance(col, bool) or not isinstance(row, int) or not isinstance(col, int):
+        if (
+            isinstance(row, bool)
+            or isinstance(col, bool)
+            or not isinstance(row, int)
+            or not isinstance(col, int)
+        ):
             raise TypeError("row and col must be integers")
         rows, cols = self.environment.spatial_shape
         if not 0 <= row < rows or not 0 <= col < cols:
