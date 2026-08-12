@@ -9,6 +9,8 @@ scientific formulas.
 from __future__ import annotations
 
 FOOT_TO_METRE = 0.3048
+MILE_TO_METRE = 1609.344
+HOUR_TO_SECOND = 3600.0
 POUND_TO_KILOGRAM = 0.45359237
 BTU_IT_TO_JOULE = 1055.05585262
 MINUTE_TO_SECOND = 60.0
@@ -22,6 +24,7 @@ BTU_LB_TO_J_KG = BTU_IT_TO_JOULE / POUND_TO_KILOGRAM
 BTU_FT2_MIN_TO_W_M2 = BTU_IT_TO_JOULE / SQUARE_FOOT_TO_SQUARE_METRE / MINUTE_TO_SECOND
 FT_INV_TO_M_INV = 1.0 / FOOT_TO_METRE
 FT_MIN_TO_M_S = FOOT_TO_METRE / MINUTE_TO_SECOND
+MPH_TO_M_S = MILE_TO_METRE / HOUR_TO_SECOND
 
 
 def metres_to_feet(value: float) -> float:
@@ -106,3 +109,15 @@ def ft_min_to_m_s(value: float) -> float:
     """Convert ft/min to m/s."""
 
     return value * FT_MIN_TO_M_S
+
+
+def m_s_to_mph(value: float) -> float:
+    """Convert metres per second to miles per hour."""
+
+    return value / MPH_TO_M_S
+
+
+def mph_to_m_s(value: float) -> float:
+    """Convert miles per hour to metres per second."""
+
+    return value * MPH_TO_M_S
