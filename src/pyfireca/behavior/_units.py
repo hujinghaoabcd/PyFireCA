@@ -19,6 +19,7 @@ CUBIC_FOOT_TO_CUBIC_METRE = FOOT_TO_METRE**3
 LB_FT2_TO_KG_M2 = POUND_TO_KILOGRAM / SQUARE_FOOT_TO_SQUARE_METRE
 LB_FT3_TO_KG_M3 = POUND_TO_KILOGRAM / CUBIC_FOOT_TO_CUBIC_METRE
 BTU_LB_TO_J_KG = BTU_IT_TO_JOULE / POUND_TO_KILOGRAM
+BTU_FT2_MIN_TO_W_M2 = BTU_IT_TO_JOULE / SQUARE_FOOT_TO_SQUARE_METRE / MINUTE_TO_SECOND
 FT_INV_TO_M_INV = 1.0 / FOOT_TO_METRE
 FT_MIN_TO_M_S = FOOT_TO_METRE / MINUTE_TO_SECOND
 
@@ -81,6 +82,18 @@ def btu_lb_to_j_kg(value: float) -> float:
     """Convert international-table Btu/lb to J/kg."""
 
     return value * BTU_LB_TO_J_KG
+
+
+def w_m2_to_btu_ft2_min(value: float) -> float:
+    """Convert W/m² to Btu/ft²/min."""
+
+    return value / BTU_FT2_MIN_TO_W_M2
+
+
+def btu_ft2_min_to_w_m2(value: float) -> float:
+    """Convert Btu/ft²/min to W/m²."""
+
+    return value * BTU_FT2_MIN_TO_W_M2
 
 
 def m_s_to_ft_min(value: float) -> float:
