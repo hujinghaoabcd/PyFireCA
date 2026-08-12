@@ -6,44 +6,44 @@
 
 ## 1. Purpose
 
-PyFireCA is a wildfire cellular-automata research framework. Its primary purpose is to make the CA itself easy to study and modify without coupling CA changes to GIS I/O, fire-behavior equations, experiment scripts, or visualization code.
+PyFireCA is a wildfire cellular-automata research framework designed so the **CA itself** can be studied and modified without coupling CA changes to GIS I/O, fire-behavior equations, experiment scripts, or visualization code.
 
-The project is **not** a generic urban/geospatial CA framework. Urban CA projects are engineering references only: they inform data contracts, GIS workflows, experiment organization, and software structure.
+The project is not a generic urban/geospatial CA framework. Other CA/GIS projects may inform engineering patterns, but wildfire simulation remains the supported domain.
 
-## 2. Design principles
+## 2. Core principles
 
-1. **CA mechanisms are explicit.** State, neighborhood, transition rule, and time stepping must be visible in the API.
-2. **Scientific equations are separated from propagation mechanics.** Fire behavior computes quantities such as ROS; CA rules decide how those quantities alter cells.
-3. **Reference implementation first.** NumPy is the baseline implementation. Optimization follows profiling and must preserve reference behavior.
-4. **GIS is an adapter layer.** The simulation kernel should not depend on file paths or perform implicit reprojection/resampling.
-5. **Reproducibility is part of the model contract.** Randomness must be explicit and seeded through `numpy.random.Generator`.
-6. **No premature platform architecture.** Avoid plugins, multiple backends, distributed execution, service layers, or GUI abstractions until a real need exists.
-7. **Documentation evolves with code.** Design, status, validation, and handoff documents are mandatory development artifacts.
-8. **Scientific reference values carry provenance.** External numerical fixtures must identify their source, variant, units, and evidence grade rather than appearing as unexplained constants.
+1. **CA mechanisms are explicit:** State, Neighborhood, TransitionRule, and scheduler/time stepping are visible extension points.
+2. **Fire behavior is separate from propagation:** behavior computes ROS/intensity/etc.; CA rules decide how those quantities change cells.
+3. **Reference implementation first:** readable NumPy before profiling-led optimization.
+4. **GIS is an adapter/data boundary:** numerical kernels do not depend on paths, GDAL objects, or silent reprojection/resampling.
+5. **Missing-data semantics are explicit:** file NoData, persistent simulation domain, and transient missing weather are different concepts.
+6. **Reproducibility is part of the API:** randomness uses explicit `numpy.random.Generator`; external scientific fixtures carry provenance.
+7. **No premature platform architecture:** no plugin/backend/distributed/service framework without a demonstrated need.
+8. **Documentation tracks repository truth:** design, validation, status, handoff, and changelog evolve with code.
 
-## 3. Core conceptual model
-
-The minimal CA formulation used by PyFireCA is:
+## 3. Conceptual architecture
 
 ```text
-Grid + State + Neighborhood + TransitionRule + Simulation
+GIS / external data
+        ↓
+RasterMetadata + aligned arrays
+        ↓
+EnvironmentalData + LandscapeInput
+        ↓
+FireBehaviorModel ───────────────┐
+        ↓                        │
+FireBehaviorResult               │
+        ↓                        │
+TransitionRule ← Neighborhood ← RasterGrid/State
+        ↓
+Simulation / scheduler
+        ↓
+state / future arrival-time outputs
 ```
 
-Wildfire behavior is added as a domain-specific collaborator:
+The simulation orchestrator must never contain model-family branches such as `if behavior == "rothermel"` or `if neighborhood == "moore"`.
 
-```text
-Environmental data
-      ↓
-FireBehaviorModel
-      ↓
-TransitionRule
-      ↓
-State update
-```
-
-The simulation orchestrator must not contain model-specific branches such as `if behavior == "rothermel"` or `if neighborhood == "moore"`.
-
-## 4. Initial package structure
+## 4. Current implemented package
 
 ```text
 src/pyfireca/
@@ -55,165 +55,49 @@ src/pyfireca/
 ├── simulation.py
 ├── data.py
 ├── gis.py
-├── config.py
-├── metrics.py
 └── behavior/
     ├── __init__.py
     ├── base.py
     ├── _units.py
-    ├── rothermel.py
-    ├── fbp.py
-    └── fuel.py
+    └── rothermel.py
 ```
 
-This layout is intentionally compact. Files become packages only when their implementation size or extension pressure justifies the split. The tree above describes ownership boundaries, not a requirement to create empty files before their milestone begins.
+Do not create empty `config.py`, `metrics.py`, `fbp.py`, backend packages, or plugin systems merely to make the tree look complete.
 
 ## 5. Component responsibilities
 
 ### 5.1 `state.py`
 
-Owns CA state definitions and state-level invariants.
-
-Initial wildfire states:
+Owns canonical wildfire states and state-level invariants.
 
 ```text
-UNBURNABLE
-UNBURNED
-BURNING
-BURNED
+UNBURNABLE = 0
+UNBURNED   = 1
+BURNING    = 2
+BURNED     = 3
 ```
 
-Rules:
-
-- numeric state codes must not be scattered as magic integers;
-- state arrays should use compact integer dtypes;
-- transitions that are impossible by model definition should be testable as invariants;
-- future multi-stage combustion states may be added without changing `Simulation`.
+`build_initial_state(domain_mask, ignition_mask)` converts explicit domain/ignition semantics to canonical state. It does not inspect GIS files or infer NoData meaning.
 
 ### 5.2 `grid.py`
 
-Owns the spatial lattice and CA state-array shape contract.
+`RasterGrid` owns the evolving CA state array and grid-shape contract. It does not read files or compute fire behavior.
 
-Initial implementation: `RasterGrid` only.
-
-`RasterGrid` currently stores state and optional cell size. It does not yet own CRS/affine metadata. Geospatial ownership is deliberately postponed until the Rasterio adapter workflow demonstrates whether shared domain metadata or optional grid metadata is cleaner.
-
-`Grid` does not read files and does not compute fire behavior.
+A scalar `cell_size` remains optional and is not inferred automatically from arbitrary affine metadata because rotated/rectangular pixels may not have one safe scalar representation.
 
 ### 5.3 `neighborhood.py`
 
-Owns cell interaction geometry.
+Owns interaction geometry. Moore and Von Neumann neighborhoods are implemented. Future research may add directional, weighted, adaptive, anisotropic, radius-based, or multi-scale neighborhoods without modifying `Simulation`.
 
-Initial types:
-
-- Moore;
-- Von Neumann.
-
-Research extensions may include radius, directional, weighted, adaptive, anisotropic, or multi-scale neighborhoods. These must be addable without changing `Simulation`.
-
-A neighborhood should expose reusable offsets or equivalent index structures rather than instantiate Python `Cell` objects for every location.
+Avoid millions of Python `Cell` objects; cells are array locations.
 
 ### 5.4 `rules.py`
 
-Owns CA transition mechanics. This is the main algorithm-research extension point.
+Owns CA transition mechanics and is the primary algorithm-research extension point.
 
-Planned rule families:
+Planned rule families include deterministic, probabilistic, and Cell2Fire-like distance accumulation. Rules may consume state, neighborhood, environmental data, fire-behavior outputs, time, and RNG, but never perform GIS file I/O.
 
-- deterministic;
-- probabilistic;
-- distance-accumulation / Cell2Fire-like;
-- future adaptive variants.
-
-A transition rule may consume fire-behavior output, local environmental layers, neighborhood information, current state, time, and RNG. It should return state changes or transition information without performing GIS I/O.
-
-### 5.5 `behavior/`
-
-Owns wildfire behavior calculations but **not** spatial CA propagation.
-
-All behavior implementations return a common `FireBehaviorResult` containing standardized quantities used by CA rules. The current common boundary is:
-
-- `spread_rate_m_s` — required, finite and non-negative;
-- `spread_direction_deg` — optional, degrees clockwise from geographic north in `[0, 360)`;
-- `fireline_intensity_w_m` — optional;
-- `flame_length_m` — optional;
-- `diagnostics` — optional model-specific scalar values.
-
-The behavior model input type is intentionally generic. Rothermel- and FBP-style implementations may define different strongly typed input dataclasses rather than being forced into one oversized common input object. Their scientific differences stay visible; interchangeability occurs at the common result boundary.
-
-Initial scientific targets:
-
-1. Albini-adjusted Rothermel surface fire behavior as the first reference implementation;
-2. FBP-style behavior for later Cell2Fire-related experiments.
-
-Implementations must be independently testable against reference calculations. Detailed unit, direction, and adapter rules are maintained in [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md), and Rothermel-specific provenance/validation decisions in [`ROTHERMEL_REFERENCE.md`](ROTHERMEL_REFERENCE.md).
-
-### 5.6 `data.py`
-
-Owns in-memory environmental layers and time-varying data access.
-
-The implemented contract is deliberately small:
-
-```text
-SpatialLayer
-EnvironmentalData
-```
-
-A `SpatialLayer` is either:
-
-```text
-static layer:   (Y, X)
-dynamic layer:  (T, Y, X)
-```
-
-It may carry explicit `units` and `nodata` metadata. `EnvironmentalData` validates a shared spatial shape across all layers and, for the initial index-based contract, a shared time length across dynamic layers.
-
-Static and dynamic layers can be accessed through one snapshot call without creating heavyweight Python `Cell` objects. Physical timestamps/interpolation, xarray/Zarr abstractions, and GIS metadata are intentionally deferred until concrete integrations require them.
-
-The kernel works with arrays, not file paths.
-
-### 5.7 `gis.py`
-
-Owns the lightweight geospatial raster contract and later file-format adapters.
-
-The currently implemented core is Rasterio-independent:
-
-```text
-RasterMetadata
-RasterAlignmentError
-validate_raster_alignment()
-validate_named_raster_alignment()
-```
-
-`RasterMetadata` contains:
-
-```text
-shape       (height, width)
-crs         canonical string supplied by an adapter
-transform   six affine coefficients
-nodata      optional marker
-```
-
-For the raster CA line, geometric alignment currently requires compatible:
-
-- shape;
-- canonical CRS;
-- complete affine transform within an explicit numerical tolerance.
-
-NoData equality is optional because NoData representation and NoData simulation semantics are separate concerns.
-
-The core GIS contract never silently:
-
-- reprojects;
-- resamples;
-- crops;
-- shifts an origin;
-- changes CRS.
-
-Those operations belong to explicit preprocessing. Resolution alone is insufficient to establish alignment because two equal-resolution rasters may still have different origins or rotations.
-
-Rasterio remains an optional dependency for the future adapter that converts real datasets to arrays plus `RasterMetadata`. Detailed rules are in [`GIS_DATA_CONTRACT.md`](GIS_DATA_CONTRACT.md).
-
-### 5.8 `simulation.py`
+### 5.5 `simulation.py`
 
 Owns orchestration only:
 
@@ -221,31 +105,86 @@ Owns orchestration only:
 initialize → step → run → stop
 ```
 
-It manages:
+The current reference engine is synchronous: the full old state is read before the complete new state is applied. Newly ignited cells therefore cannot propagate again in the same step.
 
-- current step/time;
-- explicit RNG;
-- application of a transition rule;
-- stop conditions;
-- optional callbacks later if justified.
+### 5.6 `behavior/`
 
-It must stay scientifically boring. Model-specific formulas do not belong here.
+Owns wildfire behavior calculations, not CA propagation.
 
-### 5.9 `metrics.py`
+Stable CA-facing output:
 
-Owns model outputs and evaluation measures rather than simulation mechanics.
+```text
+spread_rate_m_s            required
+spread_direction_deg       optional, clockwise from north in [0, 360)
+fireline_intensity_w_m     optional
+flame_length_m              optional
+diagnostics                 optional
+```
 
-Planned outputs include:
+Behavior-model inputs remain model-specific and strongly typed.
 
-- burned area;
-- active burning cells;
-- arrival time;
-- perimeter-derived metrics;
-- spatial overlap metrics for validation.
+Initial scientific sequence:
 
-## 6. Data representation strategy
+```text
+Albini-adjusted Rothermel reference
+        ↓
+validated FireBehaviorResult
+        ↓
+later FBP for Cell2Fire-oriented comparisons
+```
 
-PyFireCA should prefer **structure-of-arrays** representations:
+### 5.7 `data.py`
+
+Owns array-first environmental and landscape assembly.
+
+```text
+SpatialLayer
+EnvironmentalData
+LandscapeInput
+MissingEnvironmentalDataError
+nodata_mask
+build_domain_mask
+```
+
+`SpatialLayer` supports static `(Y, X)` and dynamic `(T, Y, X)` data with optional explicit units/NoData metadata.
+
+`EnvironmentalData.snapshot()` is intentionally policy-free.
+
+`EnvironmentalData.require_complete_snapshot()` is the explicit fail-fast path for calculations requiring complete selected inputs. It rejects declared NoData and additional non-finite values but never interpolates, fills, masks, skips time steps, or changes the permanent domain.
+
+`LandscapeInput` owns one shared `RasterMetadata`, aligned environmental arrays, and initial state; it can create an independent evolving `RasterGrid`.
+
+### 5.8 `gis.py`
+
+Owns the lightweight raster contract plus optional Rasterio I/O.
+
+Implemented:
+
+```text
+RasterMetadata
+RasterAlignmentError
+validate_raster_alignment
+validate_named_raster_alignment
+read_raster
+write_raster
+write_state_raster
+```
+
+Rasterio is optional. Importing the CA core does not require it.
+
+Geometric alignment requires:
+
+```text
+same shape
+same canonical CRS
+same complete affine transform within explicit tolerance
+```
+
+The GIS layer never silently reprojects, resamples, crops, shifts, or changes CRS.
+
+## 6. Data representation
+
+Prefer structure-of-arrays:
 
 ```text
 state       [Y, X]
@@ -257,107 +196,65 @@ wind_dir    [T, Y, X]
 moisture    [T, Y, X]
 ```
 
-Avoid millions of Python `Cell` objects containing duplicated attributes. A cell is primarily an array location `(row, col)`.
+This supports readable NumPy now and possible Numba later.
 
-This choice supports readable NumPy code now and possible Numba acceleration later.
+## 7. GIS and NoData semantics
 
-## 7. GIS data contract
+Three concepts must remain distinct.
 
-The implemented geometric precondition is:
+### 7.1 Geometric alignment
 
-```text
-same spatial shape
-+
-same canonical CRS
-+
-same affine transform within declared tolerance
-```
+Before simulation, raster data must describe the same cells. Shape + CRS + full affine transform are checked explicitly. Equal resolution alone is insufficient.
 
-The transform check implicitly protects origin, resolution, pixel-axis orientation, rotation/shear, and extent implied by shape + transform. Equal shape/resolution alone does not prove cell-to-cell correspondence.
+### 7.2 Persistent domain
 
-`validate_raster_alignment()` fails closed with `RasterAlignmentError`; it never attempts to repair the data. `validate_named_raster_alignment()` validates many named inputs against one reference grid and includes the offending layer name in errors.
+NoData does **not** automatically mean `UNBURNABLE`.
 
-The default affine coefficient tolerance is an absolute `1e-9` with zero relative tolerance. It exists only for floating-point representation noise and must not be enlarged to accept a real grid shift.
-
-NoData remains a separate semantic contract. The project has not yet decided that every missing fuel/weather cell is automatically `UNBURNABLE`.
-
-A later Rasterio/PROJ adapter may canonicalize equivalent CRS definitions before creating `RasterMetadata`, but the numerical core will not implement a partial CRS parser.
-
-See [`GIS_DATA_CONTRACT.md`](GIS_DATA_CONTRACT.md).
-
-## 8. Randomness and reproducibility
-
-Do not use global `np.random.seed()` as model state.
-
-Preferred pattern:
-
-```python
-rng = np.random.default_rng(seed)
-```
-
-The RNG is passed into the simulation/rule boundary. A fixed configuration and fixed seed should reproduce a deterministic regression artifact within documented numerical tolerance.
-
-Monte Carlo execution will later derive independent streams explicitly rather than reusing hidden global state.
-
-## 9. Configuration boundary
-
-Configuration is an orchestration concern, not the internal model representation.
-
-A YAML configuration may eventually select:
-
-```yaml
-simulation:
-  steps: 100
-  seed: 42
-
-ca:
-  neighborhood:
-    type: moore
-    radius: 1
-  rule:
-    type: distance
-
-behavior:
-  model: rothermel
-```
-
-Internally, validated configuration should construct normal Python objects. Core numerical functions should not repeatedly query raw YAML dictionaries.
-
-Initial implementation should prefer standard-library dataclasses and a small YAML dependency only when configuration work begins. Do not add Pydantic until validation requirements justify it.
-
-## 10. Performance policy
-
-Performance evolution:
+The persistent domain is built only from caller-selected static layers:
 
 ```text
-NumPy reference
-    ↓ profile
-Numba on measured hotspots
-    ↓ only if needed
-additional acceleration
+selected static layer declared NoData
+        ↓
+invalid domain cell
+        ↓
+UNBURNABLE during initial state construction
 ```
 
-Requirements:
+Dynamic layers cannot define permanent domain state.
 
-- keep a readable reference path;
-- benchmark separately from correctness tests;
-- optimization must not change scientific semantics silently;
-- optimized/reference equivalence tests are required before an optimized path becomes default.
+### 7.3 Transient missing environmental inputs
 
-PyTorch/JAX/differentiable CA are explicitly outside the current scope.
-
-## 11. Testing and validation architecture
-
-Four software/scientific levels remain mandatory:
+When a calculation requires complete dynamic weather/moisture, it calls:
 
 ```text
-unit        — isolated contracts and invariants
-integration — multiple components in one short simulation
-regression  — stable reference outputs with fixed seed/config
-validation  — comparison with scientific/reference calculations
+require_complete_snapshot(required_layers, time_index)
 ```
 
-Scientific external values additionally receive evidence grades documented in [`VALIDATION.md`](VALIDATION.md):
+Missing/non-finite required data cause an explicit error. If interpolation is later supported, interpolation belongs to a documented preprocessing/data-integration step before this completeness gate.
+
+## 8. Output semantics
+
+The canonical state GeoTIFF uses:
+
+```text
+dtype          uint8
+state codes    0..3
+file NoData    None
+```
+
+`UNBURNABLE=0` is a real model state and must not be confused with file NoData.
+
+Arrival-time output will receive a separate convention only when arrival-time state is implemented.
+
+## 9. Rothermel scientific boundary
+
+The first reference line is **Albini-adjusted Rothermel**.
+
+The public fuel representation uses six fixed classes and SI-facing inputs. Legacy ft/lb/Btu/min conversion is centralized in `_units.py`.
+
+R1 currently contains only independently testable base quantities. R2 reaction/heat-transfer functions are blocked until a reproducible external zero-wind/zero-slope validation fixture is pinned.
+
+External numerical evidence grades are:
 
 ```text
 Grade A  primary/authoritative worked value
@@ -366,85 +263,125 @@ Grade C  independent implementation comparison
 Grade D  internal synthetic/analytical fixture
 ```
 
-External snapshots are pinned with source revision/provenance and protected from accidental edits. Performance benchmarks live under `benchmarks/`, not correctness tests.
+Do not weaken tolerances or mix equation variants to force agreement.
 
-## 12. Reference projects and what is borrowed
+## 10. Randomness and reproducibility
 
-The project should learn selectively rather than copy architectures wholesale:
+Use:
 
-- **Cell2Fire** — cell-based wildfire propagation, distance/ROS concepts, landscape simulation and Monte Carlo;
-- **SimFire** — Python simulation API organization and independent behavior comparison;
-- **GridFire** — raster modeling, Monte Carlo organization, richer wildfire system concerns;
-- **Pyretechnics** — modular fire-behavior equations and static/dynamic environmental data organization; Level Set propagation is not adopted;
-- **ELMFIRE / ForeFire** — comparison baselines for non-CA propagation, not implementation targets;
-- **UrbanVCA / PLUS / intPLUS** — GIS preprocessing, raster contracts, experiment/data workflow ideas only;
-- **Mesa-Geo** — modern Python GIS engineering, documentation, CI, repository hygiene.
+```python
+rng = np.random.default_rng(seed)
+```
 
-## 13. Explicit non-goals for `v0.1.x`
+Do not use global RNG state as model state. Future Monte Carlo execution must define independent stream generation explicitly.
 
-- generic urban CA framework;
+Reproducible runs should eventually record package version, Git commit, seed strategy, configuration, input identity/hash where practical, and backend/runtime information.
+
+## 11. Performance policy
+
+```text
+readable NumPy reference
+        ↓
+correctness + validation
+        ↓
+profiling
+        ↓
+Numba only for measured hotspots
+        ↓
+other acceleration only if still justified
+```
+
+The NumPy path remains available for equivalence testing after optimization.
+
+## 12. Testing architecture
+
+```text
+unit        isolated contracts and equations
+integration multiple components in small scenarios
+regression  stable outputs under fixed configuration/seed
+validation  scientific/reference comparisons
+```
+
+Performance benchmarks live outside correctness tests.
+
+Optional GIS dependencies have their own CI job in addition to Python 3.11/3.12/3.13 and quality jobs.
+
+## 13. Reference-project usage
+
+- **Cell2Fire** — cell-based propagation, ROS/distance concepts, landscape Monte Carlo.
+- **SimFire** — Python organization and independent Rothermel comparison.
+- **GridFire** — raster/Monte Carlo organization and richer wildfire concerns.
+- **Pyretechnics** — modular behavior/data organization and independent numerical comparison; its Level Set engine is not adopted.
+- **ELMFIRE / ForeFire** — non-CA comparison baselines.
+- Urban/GIS CA projects — GIS preprocessing and software-engineering lessons only.
+
+Reference code is not copied blindly; published equations and independently documented interpretations define scientific implementation.
+
+## 14. Explicit non-goals for `v0.1.x`
+
+- generic urban CA;
 - differentiable CA;
-- PyTorch/JAX backend;
+- Torch/JAX backend;
 - GPU acceleration;
-- Level Set propagation;
-- front tracking;
+- Level Set/front tracking as propagation engine;
 - CFD/fire-atmosphere coupling;
-- plugin ecosystem / entry points;
-- REST API / Web UI / database;
+- plugin ecosystem;
+- REST/Web/database platform;
 - distributed execution.
-
-## 14. Extension rule
-
-A proposed feature is architecturally healthy when it can be added by extending one clearly owned component with minimal modification elsewhere.
-
-Examples:
-
-- new neighborhood → `neighborhood.py` + tests;
-- new CA rule → `rules.py` + tests;
-- new fire behavior model → `behavior/` + validation;
-- new raster file format → `gis.py` adapter + GIS tests;
-- new metric → `metrics.py`.
-
-If a new CA rule requires edits throughout GIS, simulation, configuration, and grid code, the abstraction boundaries should be reviewed before implementation.
 
 ## 15. Design decisions log
 
-### D001 — Wildfire-specific product scope
-
-PyFireCA is a wildfire CA framework. Urban CA projects are references, not supported domains.
+### D001 — Wildfire-specific scope
+PyFireCA is a wildfire CA framework; urban CA projects are engineering references only.
 
 ### D002 — Compact module layout
+Create modules when a real milestone needs them, not for hypothetical completeness.
 
-Start with a small number of modules. Do not create one directory/class per hypothetical future extension.
-
-### D003 — NumPy as the scientific reference
-
-The first correct implementation is NumPy. Numba is introduced only after profiling.
+### D003 — NumPy scientific reference
+Implement and validate readable NumPy first; optimize only after profiling.
 
 ### D004 — Fire behavior separate from CA propagation
+Behavior equations and transition mechanics remain independently replaceable.
 
-ROS/intensity calculations and cell-transition mechanics remain independently replaceable.
-
-### D005 — GIS metadata is explicit
-
-Geospatial alignment is validated before simulation; the kernel never silently repairs incompatible inputs.
+### D005 — Explicit GIS metadata/alignment
+Simulation never silently repairs incompatible geospatial inputs.
 
 ### D006 — Development documentation is mandatory
+Design/status/handoff/validation documentation tracks meaningful architecture/science changes.
 
-Every meaningful architecture or scientific change must update `DESIGN.md`, `STATUS.md`, and `HANDOFF.md` when affected.
+### D007 — Standardize outputs, not model-native inputs
+Behavior families share `FireBehaviorResult`; their inputs remain model-specific.
 
-### D007 — Standardize behavior outputs, not model-native inputs
+### D008 — Minimal array-first environmental data
+Use `(Y,X)` / `(T,Y,X)` arrays and defer heavy time/xarray abstractions until concrete integration requires them.
 
-Rothermel, FBP, and future behavior models return the same `FireBehaviorResult`, but each model may keep its own typed input dataclass. This avoids a weak oversized input schema while preserving a stable CA-facing boundary.
-
-### D008 — Minimal array-first environmental data contract
-
-The initial data layer uses `SpatialLayer` and `EnvironmentalData` with `(Y, X)` / `(T, Y, X)` arrays and explicit numerical alignment checks. Physical time coordinates and xarray/Zarr abstractions are deferred until a concrete requirement justifies them.
-
-### D009 — GIS alignment precedes file-format adapters
-
-The core GIS contract is a lightweight `RasterMetadata` object independent of Rasterio. Raster layers must agree in shape, canonical CRS, and full affine transform before they enter simulation. GIS preprocessing may transform data; CA simulation may not silently transform its input grid. Rasterio remains an optional adapter dependency.
+### D009 — GIS alignment precedes file transformation
+Shape, canonical CRS, and full affine transform are validated before simulation. Reprojection/resampling belongs to explicit preprocessing.
 
 ### D010 — External scientific fixtures require provenance grades
+Reference values record source, revision/version, units, formulation scope, and evidence grade.
 
-Externally sourced numerical values are not anonymous regression constants. They record evidence grade, source/document or repository, revision/version where applicable, units, and scope. Grade A primary worked values are preferred for interpretation; Grade B official software regression and Grade C independent implementations are used according to documented scope.
+### D011 — NoData and persistent domain are separate
+A NoData marker becomes permanent domain exclusion only when the caller explicitly selects that static layer as domain-defining. Dynamic NoData never silently creates `UNBURNABLE` state.
+
+### D012 — Required dynamic inputs fail fast by default
+`require_complete_snapshot()` validates explicitly required data and raises on declared NoData or non-finite values. Automatic repair/interpolation is not a hidden model behavior.
+
+### D013 — State output is complete model state, not masked source data
+State GeoTIFFs use canonical `uint8` state codes with no file-level NoData. `UNBURNABLE=0` remains a modeled state.
+
+## 16. Immediate architecture priority
+
+The GIS/data foundation is now sufficient. Do not expand it merely because extension points exist.
+
+Immediate work returns to the Rothermel R2 validation gate:
+
+```text
+external zero-wind + zero-slope reference
+        ↓
+Albini-adjusted formula-level functions
+        ↓
+validated base ROS
+```
+
+Only after a physical ROS path is independently validated should behavior-informed CA propagation begin.
