@@ -61,9 +61,11 @@ def test_static_file_workflow_validates_runs_and_writes_reproducible_artifacts(t
         artifacts.metadata,
         artifacts.environment,
         artifacts.metrics,
+        artifacts.log,
         artifacts.outputs.arrival_time,
         artifacts.outputs.state,
         artifacts.outputs.burned_mask,
+        artifacts.outputs.perimeter,
     ):
         assert path.is_file()
 
@@ -87,6 +89,14 @@ def test_static_file_workflow_validates_runs_and_writes_reproducible_artifacts(t
     metrics = json.loads(artifacts.metrics.read_text(encoding="utf-8"))
     assert metrics["burned_cell_count"] == 3
     assert metrics["burned_area_m2"] == pytest.approx(2700.0)
+
+    log = artifacts.log.read_text(encoding="utf-8")
+    assert "PyFireCA static run completed" in log
+    assert "burned_cell_count=3" in log
+
+    perimeter = json.loads(artifacts.outputs.perimeter.read_text(encoding="utf-8"))
+    assert perimeter["type"] == "FeatureCollection"
+    assert perimeter["features"]
 
     arrival, arrival_metadata = read_raster(artifacts.outputs.arrival_time)
     assert arrival.shape == (1, 3)
