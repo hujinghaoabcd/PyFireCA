@@ -2,11 +2,11 @@
 
 > Updated: 2026-08-12
 >
-> Current milestone: **C — Wildfire data and behavior boundary**
+> Current milestone: **D — Validated Rothermel reference implementation (R1 complete / R2 gated)**
 
 ## Current position
 
-PyFireCA now has a tested CA reference core, a common fire-behavior/data boundary, and the first real behavior-family input contract.
+PyFireCA now has a tested CA reference core, common behavior/data contracts, typed Rothermel inputs, and the first independently testable Rothermel base calculations.
 
 ```text
 RasterGrid + FireState + Neighborhood + TransitionRule
@@ -17,14 +17,16 @@ EnvironmentalData
       ↓
 RothermelInputs
       ↓
-future Rothermel reference implementation
+R1: units + fuel weighting/base quantities
+      ↓
+R2: no-wind/no-slope ROS   ← next scientific gate
       ↓
 FireBehaviorResult
       ↓
 future behavior-informed CA rule
 ```
 
-The Rothermel scientific equation chain has **not** been implemented yet. This is intentional: the input/fuel/unit conventions are being stabilized and tested first.
+The complete Rothermel ROS equation chain is **not** implemented yet. R1 is intentionally separated from R2 so unit/weighting errors can be distinguished from differences among Rothermel/Albini/Andrews equation variants.
 
 ## Completed
 
@@ -36,7 +38,7 @@ The Rothermel scientific equation chain has **not** been implemented yet. This i
 - GitHub Actions matrix for Python 3.11, 3.12, and 3.13;
 - English/Chinese README with runnable CA example;
 - `CITATION.cff`, `CHANGELOG.md`, `CONTRIBUTING.md`;
-- living design, development, validation, status, and handoff documentation.
+- living design, development, validation, status, handoff, behavior/data, and Rothermel reference documentation.
 
 ### CA reference core
 
@@ -66,55 +68,58 @@ The Rothermel scientific equation chain has **not** been implemented yet. This i
 
 Implemented in `src/pyfireca/behavior/rothermel.py`:
 
-- fixed six-class fuel ordering:
-  - `DEAD_1H`;
-  - `DEAD_10H`;
-  - `DEAD_100H`;
-  - `DEAD_HERBACEOUS`;
-  - `LIVE_HERBACEOUS`;
-  - `LIVE_WOODY`;
-- `RothermelFuelModel` with explicit SI-unit fields;
-- burnable/nonburnable validation;
-- per-loaded-class SAV/heat-content/particle-density validation;
-- `RothermelFuelMoisture` with five external moisture inputs;
-- six-class moisture expansion with dead-herbaceous moisture initially following dead 1-h moisture;
-- live fuel moisture values above 1.0 allowed on a dry-mass basis;
-- `RothermelInputs` with:
-  - midflame wind speed;
-  - explicit meteorological `wind_from_direction_deg`;
-  - slope;
-  - aspect;
-- 10-m/20-ft to midflame wind adjustment intentionally kept outside the core Rothermel input contract.
+- stable six-class ordering: dead 1-h, dead 10-h, dead 100-h, dead herbaceous, live herbaceous, live woody;
+- `RothermelFuelModel` with SI-unit fields and burnability/property validation;
+- `RothermelFuelMoisture` with five external moisture inputs and six-class expansion;
+- `RothermelInputs` with midflame wind, meteorological wind-from direction, slope, and aspect;
+- 10-m/20-ft wind adjustment kept outside the core Rothermel input contract.
 
-The first behavior implementation is therefore sequenced as **Rothermel reference first**, while FBP remains planned for later Cell2Fire-oriented work. This is a development-order decision rather than a product-level preference.
+Rothermel remains the first reference implementation; FBP is planned later for Cell2Fire-oriented experiments.
 
-### Rothermel documentation
+### R1 — exact unit conversion layer
 
-Added `docs/ROTHERMEL_REFERENCE.md`, which records:
+Added `src/pyfireca/behavior/_units.py` with centralized conversions for:
 
-- primary scientific references;
-- six-class fuel ordering;
-- SI public-unit policy;
-- moisture conventions;
-- wind/slope/aspect conventions;
-- independent-implementation/license rule;
-- staged implementation plan R1–R6;
-- validation strategy against authoritative references plus independent software implementations.
+```text
+m ↔ ft
+kg/m² ↔ lb/ft²
+kg/m³ ↔ lb/ft³
+1/m ↔ 1/ft
+J/kg ↔ Btu/lb
+m/s ↔ ft/min
+```
+
+The conversions are round-trip tested. Published/legacy-unit constants are no longer intended to be scattered through scientific equation functions.
+
+### R1 — base heterogeneous-fuel quantities
+
+Implemented small pure functions in `rothermel.py`:
+
+- `compute_surface_area_weights()`;
+- `compute_characteristic_sav_m_inv()`;
+- `compute_packing_ratio()`;
+- `compute_bulk_density_kg_m3()`;
+- `compute_optimum_packing_ratio()`.
+
+The weighting implementation follows the heterogeneous-fuel structure in which per-class relative surface area is proportional to SAV × oven-dry load / particle density, followed by within-dead/live and between-category weighting.
+
+A hand-computable synthetic fuel fixture verifies exact expected values instead of taking another software package as truth.
 
 ### Tests / CI
 
-New Rothermel contract tests cover:
+R1 tests cover:
 
-- stable six-class ordering;
-- valid burnable fuel models;
-- invalid depth/extinction/load conditions;
-- loaded-class physical-property requirements;
-- nonburnable zero-valued fuel models;
-- six-value tuple length/fraction validation;
-- moisture expansion and live moisture > 1.0;
-- wind/slope/direction input validation.
+- exact conversion constants and round trips;
+- surface-area weights within dead/live categories;
+- dead/live category weights;
+- characteristic SAV;
+- packing ratio;
+- oven-dry bulk density;
+- optimum packing ratio;
+- zero derived quantities for a nonburnable fuel model;
+- negative-input rejection.
 
-Latest CI run for the formatted Rothermel contract is fully green across quality checks and Python 3.11/3.12/3.13.
+The R1 scientific tests pass on Python 3.11, 3.12, and 3.13. During this implementation pass, CI failures encountered were Ruff-only style issues in test assertions; the flagged assertions have been corrected and the latest CI is being re-verified after that style fix.
 
 ## Key decisions now implemented
 
@@ -126,21 +131,41 @@ Latest CI run for the formatted Rothermel contract is fully green across quality
 6. NoData is not silently imputed.
 7. NumPy remains the readable scientific reference path.
 8. Rothermel is implemented first for reference/validation; FBP follows for Cell2Fire-oriented comparison.
-9. The six-class fuel representation is fixed before equation implementation so later Scott--Burgan-style dynamic fuels do not require a public-API redesign.
-10. Wind input to Rothermel is explicitly midflame wind; wind-adjustment-factor logic belongs outside the core equation contract.
+9. Six fuel classes are fixed before catalogue/equation implementation.
+10. Rothermel receives midflame wind explicitly; wind adjustment is external.
+11. Legacy-unit conversion is centralized and tested rather than embedded repeatedly in formulas.
+12. R1 fuel weighting/base quantities are separate from R2 reaction/heat-transfer equations.
+
+## R2 scientific decision gate
+
+Before implementing no-wind/no-slope ROS, the project must explicitly reconcile the selected reference formulation across:
+
+- original Rothermel 1972 equations;
+- Albini 1976 corrections used by later operational implementations;
+- Andrews 2018's consolidated explanation;
+- live moisture-of-extinction treatment;
+- dynamic herbaceous curing boundaries;
+- net-fuel-loading convention.
+
+Do not silently combine formulas from different vintages simply because an existing package does so.
 
 ## Not implemented yet
 
 ### Immediate scientific work
 
-- Rothermel legacy/native-unit conversion helpers and tests;
-- R1 base fuel quantities;
-- R2 no-wind/no-slope ROS;
-- authoritative numeric reference fixtures;
-- complete Rothermel wind/slope effects;
-- conversion to `FireBehaviorResult` from a real model calculation.
+- authoritative numeric R2 reference fixtures;
+- selected/documented Albini/Andrews correction set;
+- mineral and moisture damping;
+- net fuel loading;
+- reaction velocity/intensity;
+- propagating flux ratio;
+- effective heating number / heat of preignition;
+- heat source/sink;
+- no-wind/no-slope ROS;
+- wind/slope effects;
+- real `FireBehaviorResult` output from a complete Rothermel calculation.
 
-### Milestone C GIS/data work
+### GIS/data work
 
 - CRS/transform/extent alignment validation;
 - optional Rasterio read/write adapter;
@@ -154,8 +179,8 @@ Latest CI run for the formatted Rothermel contract is fully green across quality
 - directional/adaptive neighborhoods;
 - asynchronous/event-driven scheduling;
 - active/sparse updates;
-- Cell2Fire-like distance accumulation;
 - FBP;
+- Cell2Fire-like distance accumulation;
 - arrival time;
 - crown fire / spotting / suppression;
 - Monte Carlo experiment layer;
@@ -172,20 +197,18 @@ Latest CI run for the formatted Rothermel contract is fully green across quality
 
 ## Immediate next target
 
-Continue the Rothermel reference implementation in small validated stages:
+The next task is **R2 preparation**, not Cell2Fire propagation yet:
 
 ```text
-R1  explicit unit conversions + base fuel quantities
- ↓
-R2  no-wind / no-slope surface ROS
- ↓
-R3  wind + slope effects
- ↓
-R4  FireBehaviorResult
- ↓
-R5  independently verified standard fuel catalogues
- ↓
-R6  behavior-informed CA integration
+primary-source reconciliation
+        ↓
+freeze named R2 equation/correction set
+        ↓
+authoritative numeric fixtures
+        ↓
+small formula-level functions
+        ↓
+validated no-wind/no-slope ROS
 ```
 
-Do not begin Cell2Fire-like distance accumulation until at least one fire-behavior path can produce independently validated ROS values.
+Only after one independently validated ROS path exists should PyFireCA build its first physically informed CA rule.
