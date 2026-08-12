@@ -6,7 +6,12 @@ import pytest
 from pyfireca.arrival import ConstantDirectionalSpreadRate, StaticArrivalTimeSolver
 from pyfireca.behavior._surface_ellipse import build_surface_fire_ellipse
 from pyfireca.behavior._units import ft_min_to_m_s
-from pyfireca.evaluation import analytical_ellipse_arrival_times, arrival_error_metrics
+from pyfireca.evaluation import (
+    analytical_ellipse_arrival_times,
+    arrival_error_metrics,
+    homogeneous_ellipse_lattice_arrival_error_s,
+    immediate_square_lattice_path_distance_m,
+)
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
 
 
@@ -46,6 +51,82 @@ def test_analytical_fm1_ellipse_recovers_known_head_off_axis_and_backing_times()
     assert arrival[1, 2] == pytest.approx(30.0 / head, rel=1e-13)
     assert arrival[0, 1] == pytest.approx(30.0 / 0.02921246024622574, rel=2e-10)
     assert arrival[1, 0] == pytest.approx(30.0 / 0.02074385430924511, rel=1e-13)
+
+
+def test_immediate_square_lattice_distances_match_manhattan_and_octile_geometry() -> None:
+    assert immediate_square_lattice_path_distance_m(
+        3,
+        4,
+        cell_size_m=10.0,
+        topology="vn4",
+    ) == pytest.approx(70.0)
+    assert immediate_square_lattice_path_distance_m(
+        3,
+        4,
+        cell_size_m=10.0,
+        topology="moore8",
+    ) == pytest.approx(10.0 * (1.0 + 3.0 * sqrt(2.0)))
+
+
+def test_closed_form_lattice_arrival_error_is_nonnegative_and_smaller_for_moore8() -> None:
+    head = 0.04936592733340002
+    ellipse = build_surface_fire_ellipse(head, ft_min_to_m_s(100.0))
+
+    vn4 = homogeneous_ellipse_lattice_arrival_error_s(
+        3,
+        4,
+        cell_size_m=30.0,
+        head_spread_rate_m_s=head,
+        eccentricity=ellipse.eccentricity,
+        topology="vn4",
+    )
+    moore8 = homogeneous_ellipse_lattice_arrival_error_s(
+        3,
+        4,
+        cell_size_m=30.0,
+        head_spread_rate_m_s=head,
+        eccentricity=ellipse.eccentricity,
+        topology="moore8",
+    )
+
+    assert vn4 > moore8 > 0.0
+
+
+def test_closed_form_circle_error_matches_actual_vn4_and_moore8_solver_error() -> None:
+    shape = (9, 9)
+    ignition = (4, 4)
+    target = (1, 8)
+    drow = target[0] - ignition[0]
+    dcol = target[1] - ignition[1]
+    domain = np.ones(shape, dtype=bool)
+    reference = analytical_ellipse_arrival_times(
+        shape,
+        cell_size_m=10.0,
+        ignition=ignition,
+        head_spread_rate_m_s=1.0,
+        eccentricity=0.0,
+        head_direction_deg=None,
+    )
+
+    cases = (
+        ("vn4", VonNeumannNeighborhood()),
+        ("moore8", MooreNeighborhood()),
+    )
+    for topology, neighborhood in cases:
+        observed = StaticArrivalTimeSolver(
+            neighborhood=neighborhood,
+            cell_size_m=10.0,
+            spread_rate_provider=ConstantDirectionalSpreadRate(1.0),
+        ).solve(domain, _seed(shape, ignition))
+        expected_error = homogeneous_ellipse_lattice_arrival_error_s(
+            drow,
+            dcol,
+            cell_size_m=10.0,
+            head_spread_rate_m_s=1.0,
+            eccentricity=0.0,
+            topology=topology,  # type: ignore[arg-type]
+        )
+        assert observed[target] - reference[target] == pytest.approx(expected_error, rel=1e-13)
 
 
 def test_arrival_error_metrics_return_expected_statistics() -> None:
