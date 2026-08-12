@@ -2,7 +2,7 @@
 
 > Target: first simple static simulator baseline
 >
-> Status: **release candidate pending license decision + final all-green commit**
+> Status: **release candidate pending final all-green license-metadata commit**
 
 This checklist prevents a source-tree-only success from being mistaken for a reproducible software release.
 
@@ -73,11 +73,11 @@ This checklist prevents a source-tree-only success from being mistaken for a rep
 - [x] File-based YAML → GeoTIFF → simulator integration test.
 - [x] Real CLI validate/run integration test with temporary GeoTIFF inputs.
 - [x] Built-wheel GIS end-to-end smoke test exists and has passed.
-- [ ] Latest **final release-candidate commit** has every CI job green simultaneously.
+- [ ] Latest **final MIT-metadata release-candidate commit** has every CI job green simultaneously.
 
 ## 7. Packaging
 
-Verified by the CI `package` job:
+Verified by the CI `package` job before the final MIT-metadata commit:
 
 - [x] Wheel builds from repository source.
 - [x] Source distribution builds from repository source.
@@ -89,9 +89,11 @@ Verified by the CI `package` job:
 - [x] Clean built `[gis]` wheel can generate input GeoTIFFs and execute `pyfireca validate` + `pyfireca run` end to end.
 - [x] Package name/version/author/keywords/project URLs/Python classifiers reviewed.
 - [x] Runtime `pyfireca.__version__` is regression-tested against installed distribution metadata.
-- [ ] **Choose the project license, add a root `LICENSE` file, and declare matching package license metadata.**
-
-The license item is intentionally not guessed or auto-selected because it is a project/legal policy choice.
+- [x] Project license selected: **MIT**.
+- [x] Root `LICENSE` file added with copyright `2026 Jinghao Hu`.
+- [x] `pyproject.toml` declares SPDX `license = "MIT"` and `license-files = ["LICENSE"]`.
+- [x] Minimum Hatchling build requirement raised to `>=1.27` so the declared PEP 639 metadata is supported by the minimum backend.
+- [ ] Confirm the final package job succeeds with the MIT metadata and includes the license file in built distributions.
 
 ## 8. Documentation
 
@@ -110,6 +112,7 @@ The license item is intentionally not guessed or auto-selected because it is a p
 - [x] `docs/SESSION_LOG.md` records the simulator-completion session.
 - [x] `CHANGELOG.md` includes user-visible baseline workflow additions.
 - [x] Documented installation and CLI commands are confirmed against a clean built package in CI.
+- [ ] Add the short MIT license link/badge to README files during the final release-doc pass.
 
 ## 9. Final repository audit
 
@@ -120,15 +123,16 @@ Completed:
 - [x] `__version__` and distribution version are protected by an automated equality test.
 - [x] Root repository listing contains no generated run/build artifacts; `.gitignore` covers `dist/`, `build/`, `runs/`, `.venv-*`, and `.package-smoke/`.
 - [x] Research variants remain absent from the version-1 baseline YAML/CLI.
+- [x] License policy is resolved as MIT and represented in repository/package metadata.
 
 Remaining:
 
-- [ ] Resolve the license decision and package license metadata.
-- [ ] Confirm the latest final main commit is all green after the last audit/documentation changes.
+- [ ] Confirm the latest final MIT-metadata main commit is all green.
+- [ ] Perform the final README license-link pass.
 
 ## 10. Tag/release gate
 
-Only after the two remaining gates above are satisfied:
+After the two remaining verification/documentation items above:
 
 - [ ] Choose the first baseline release version/tag.
 - [ ] Freeze release notes from `CHANGELOG.md`.
