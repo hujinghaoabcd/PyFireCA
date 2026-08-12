@@ -3,8 +3,13 @@ from math import inf, sqrt
 import numpy as np
 import pytest
 
-from pyfireca.arrival import ConstantDirectionalSpreadRate, StaticArrivalTimeSolver
+from pyfireca.arrival import (
+    ConstantDirectionalSpreadRate,
+    StaticArrivalTimeSolver,
+    arrival_times_to_state,
+)
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
+from pyfireca.state import FireState
 
 
 def _seed(shape: tuple[int, int], *items: tuple[int, int, float]) -> np.ndarray:
@@ -190,4 +195,86 @@ def test_solver_and_constant_provider_validate_construction() -> None:
             neighborhood=MooreNeighborhood(),
             cell_size_m=0.0,
             spread_rate_provider=ConstantDirectionalSpreadRate(1.0),
+        )
+
+
+def test_arrival_snapshot_tracks_unburned_burning_burned_and_unburnable() -> None:
+    domain = np.array([[True, True, True, False]], dtype=bool)
+    arrival = np.array([[0.0, 5.0, inf, inf]], dtype=np.float64)
+
+    at_4 = arrival_times_to_state(domain, arrival, time_s=4.0, burn_duration_s=10.0)
+    at_5 = arrival_times_to_state(domain, arrival, time_s=5.0, burn_duration_s=10.0)
+    at_10 = arrival_times_to_state(domain, arrival, time_s=10.0, burn_duration_s=10.0)
+    at_15 = arrival_times_to_state(domain, arrival, time_s=15.0, burn_duration_s=10.0)
+
+    assert at_4.tolist() == [[
+        FireState.BURNING,
+        FireState.UNBURNED,
+        FireState.UNBURNED,
+        FireState.UNBURNABLE,
+    ]]
+    assert at_5.tolist() == [[
+        FireState.BURNING,
+        FireState.BURNING,
+        FireState.UNBURNED,
+        FireState.UNBURNABLE,
+    ]]
+    assert at_10.tolist() == [[
+        FireState.BURNED,
+        FireState.BURNING,
+        FireState.UNBURNED,
+        FireState.UNBURNABLE,
+    ]]
+    assert at_15.tolist() == [[
+        FireState.BURNED,
+        FireState.BURNED,
+        FireState.UNBURNED,
+        FireState.UNBURNABLE,
+    ]]
+
+
+def test_arrival_snapshot_uses_uint8_canonical_state_codes() -> None:
+    domain = np.ones((1, 1), dtype=bool)
+    state = arrival_times_to_state(
+        domain,
+        np.array([[0.0]], dtype=np.float64),
+        time_s=0.0,
+        burn_duration_s=1.0,
+    )
+
+    assert state.dtype == np.uint8
+    assert state[0, 0] == FireState.BURNING
+
+
+def test_arrival_snapshot_rejects_finite_arrival_outside_domain() -> None:
+    domain = np.array([[False, True]], dtype=bool)
+    arrival = np.array([[0.0, inf]], dtype=np.float64)
+
+    with pytest.raises(ValueError, match="inside the domain"):
+        arrival_times_to_state(domain, arrival, time_s=1.0, burn_duration_s=10.0)
+
+
+@pytest.mark.parametrize(
+    ("time_s", "burn_duration_s"),
+    [
+        (-1.0, 1.0),
+        (float("inf"), 1.0),
+        (0.0, 0.0),
+        (0.0, -1.0),
+        (0.0, float("inf")),
+    ],
+)
+def test_arrival_snapshot_requires_valid_physical_time_parameters(
+    time_s: float,
+    burn_duration_s: float,
+) -> None:
+    domain = np.ones((1, 1), dtype=bool)
+    arrival = np.array([[0.0]], dtype=np.float64)
+
+    with pytest.raises(ValueError):
+        arrival_times_to_state(
+            domain,
+            arrival,
+            time_s=time_s,
+            burn_duration_s=burn_duration_s,
         )
