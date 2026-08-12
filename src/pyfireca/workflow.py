@@ -26,7 +26,6 @@ from pyfireca.simulator import (
     StaticWildfireSimulationResult,
     run_static_wildfire_simulation,
 )
-from pyfireca.state import FireState
 
 _LAYER_UNITS: dict[str, str | None] = {
     "fuel_model": "code",
@@ -128,11 +127,14 @@ def validate_static_run(config: StaticRunConfig) -> None:
     build_static_request_from_config(config)
 
 
-def _run_metadata(config: StaticRunConfig, result: StaticWildfireSimulationResult) -> dict[str, object]:
-    fuel_values = np.asarray(result.domain_mask)
-    landscape = load_static_landscape(config.inputs)
+def _run_metadata(
+    config: StaticRunConfig,
+    result: StaticWildfireSimulationResult,
+    landscape: LandscapeInput,
+) -> dict[str, object]:
+    domain = np.asarray(result.domain_mask)
     fuel_layer = np.asarray(landscape.environment.layer("fuel_model").at())
-    fuel_codes = sorted({int(value) for value in np.unique(fuel_layer[fuel_values])})
+    fuel_codes = sorted({int(value) for value in np.unique(fuel_layer[domain])})
     fuel_records = [get_standard_fuel_model_record(code) for code in fuel_codes]
 
     return {
@@ -169,18 +171,21 @@ def _environment_metadata() -> dict[str, object]:
     }
 
 
-def run_static_config(config: StaticRunConfig) -> tuple[StaticWildfireSimulationResult, StaticRunArtifacts]:
+def run_static_config(
+    config: StaticRunConfig,
+) -> tuple[StaticWildfireSimulationResult, StaticRunArtifacts]:
     """Execute one resolved config and write a self-contained result directory."""
 
     if not isinstance(config, StaticRunConfig):
         raise TypeError("config must be StaticRunConfig")
 
-    run_directory = config.output_directory
-    run_directory.mkdir(parents=True, exist_ok=True)
-    if any(run_directory.iterdir()):
-        raise FileExistsError(f"output directory must be empty: {run_directory}")
-
     request = build_static_request_from_config(config)
+
+    run_directory = config.output_directory
+    if run_directory.exists() and any(run_directory.iterdir()):
+        raise FileExistsError(f"output directory must be empty: {run_directory}")
+    run_directory.mkdir(parents=True, exist_ok=True)
+
     result = run_static_wildfire_simulation(request)
 
     resolved_config_path = run_directory / "config.resolved.yml"
@@ -193,7 +198,12 @@ def run_static_config(config: StaticRunConfig) -> tuple[StaticWildfireSimulation
         encoding="utf-8",
     )
     metadata_path.write_text(
-        json.dumps(_run_metadata(config, result), indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            _run_metadata(config, result, request.landscape),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     environment_path.write_text(
