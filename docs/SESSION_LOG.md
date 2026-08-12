@@ -1,395 +1,493 @@
 # PyFireCA Development Session Log
 
-## 2026-08-12 — Foundation, Rothermel R1, validation provenance, and GIS contract
+## 2026-08-13 — Complete static simulator baseline and release-readiness gate
 
 ### Session objective
 
-Move PyFireCA from an empty repository to a modern, tested wildfire-CA research codebase while preserving a compact architecture and detailed development handoff.
+Turn the already validated PyFireCA scientific kernel into a complete first-pass user-facing wildfire simulator without introducing new PyFireCA-specific CA research methods.
 
-The session intentionally avoided implementing a large monolithic wildfire model. Work was staged so CA mechanics, fire behavior, validation evidence, and GIS concerns remain independently testable.
+The governing priority for this session was:
+
+> **Finish the simple baseline simulator first; preserve new CA innovation ideas in documentation and defer implementation.**
 
 ---
 
-## 1. CA reference core established
+## 1. Anderson 13 fuel catalogue completed
+
+The standard fuel catalogue was expanded from:
+
+```text
+FM1
+FM2
+GR1
+```
+
+to:
+
+```text
+Anderson FM1–FM13
+Scott–Burgan GR1 (101)
+```
+
+The Anderson records were not copied from an unverified secondary table. They were audited directly from the pinned USFS Fire Lab Behave core source:
+
+```text
+firelab/behave
+commit 29888c7ad364aa18cfb340f4c25a8e395f24260f
+src/behave/fuelModels.cpp
+```
+
+Tests now verify:
+
+```text
+native record fields
+pinned source commit
+FM1–FM13 SI conversion
+positive zero-wind/zero-slope computation for all 13 models
+unchanged FM1/FM2 Grade B reference ROS
+unchanged GR1 dynamic Grade B reference ROS
+explicit rejection of unaudited model numbers
+```
+
+The full Scott–Burgan 40 catalogue remains future work and is not a blocker for the first static simulator release.
+
+---
+
+## 2. User-facing ignition API added
 
 Implemented:
 
 ```text
-FireState
-RasterGrid
-Neighborhood protocol
-MooreNeighborhood
-VonNeumannNeighborhood
-TransitionRule
-Simulation
-NeighborIgnitionRule
+IgnitionEvent
+build_ignition_times
 ```
 
-Reference update semantics are explicitly synchronous:
+Supported semantics:
 
 ```text
-State(t)
-   ↓
-rule reads complete old state
-   ↓
-compute State(t+1)
-   ↓
-Simulation replaces state once
+single ignition
+multiple simultaneous ignitions
+delayed ignition events
+duplicate-cell events → earliest time wins
 ```
 
-A regression test verifies that a newly ignited cell cannot propagate again in the same step.
+Validation rejects:
 
-The deterministic `NeighborIgnitionRule` remains an architectural baseline only; it is not claimed to represent realistic wildfire physics.
+```text
+negative/nonfinite time
+out-of-bounds ignition
+ignition outside the burnable simulation domain
+empty ignition event list
+```
+
+Ignition events are converted into the same `ignition_times_s` field consumed by the existing arrival solver; no second propagation implementation was introduced.
 
 ---
 
-## 2. Common behavior/data contracts established
+## 3. Complete programmatic static simulator API added
 
 Implemented:
 
 ```text
-FireBehaviorModel[InputT]
-FireBehaviorResult
-SpatialLayer
-EnvironmentalData
+StaticWildfireSimulationRequest
+StaticWildfireSimulationResult
+run_static_wildfire_simulation
 ```
 
-`FireBehaviorResult` standardizes the CA-facing behavior boundary while model-native inputs remain separate.
-
-Common result convention:
+The simulator is a thin assembly around the already validated static landscape factory and arrival solver:
 
 ```text
-spread_rate_m_s            required
-spread_direction_deg       optional, clockwise from geographic north
-fireline_intensity_w_m     optional
-flame_length_m              optional
-diagnostics                 optional
+LandscapeInput
+→ Rothermel landscape factory
+→ directional edge ROS
+→ StaticArrivalTimeSolver
+→ StaticWildfireSimulationResult
 ```
 
-Environmental arrays use:
+The result object exposes:
 
 ```text
-static   (Y, X)
-dynamic  (T, Y, X)
+arrival_times_s
+domain_mask
+burned_mask
+burned_cell_count
+burned_area_m2
+first_arrival_s
+last_arrival_s
+unreachable_domain_cell_count
+state_at(...)
+burned_mask_at(...)
+summary_metrics()
 ```
 
-No hidden datetime interpolation, masking, or unit conversion was introduced.
+Default physical neighborhood remains immediate Moore-8.
+
+Tests cover:
+
+```text
+single ignition
+multiple ignition
+repeated event earliest-time behavior
+arrival → state conversion
+burned footprint and area
+summary metrics
+out-of-domain ignition rejection
+```
 
 ---
 
-## 3. Rothermel public input contract established
+## 4. Stable spatial output layer added
 
 Implemented:
 
 ```text
-FuelClass
-RothermelFuelModel
-RothermelFuelMoisture
-RothermelInputs
+write_static_simulation_outputs
+write_burned_perimeter_geojson
+terminal_state_from_result
+StaticSimulationOutputPaths
 ```
 
-Fixed six-class ordering:
+Current spatial-output contract:
 
 ```text
-DEAD_1H
-DEAD_10H
-DEAD_100H
-DEAD_HERBACEOUS
-LIVE_HERBACEOUS
-LIVE_WOODY
+outputs/
+├── arrival_time.tif
+├── state.tif
+├── burned_mask.tif
+└── perimeter.geojson
 ```
 
-Public Rothermel inputs use SI units. Wind supplied to the model is explicitly midflame wind; 10-m / 20-ft wind adjustment is a separate preprocessing concern.
+### Arrival raster
+
+```text
+dtype     float64
+unit      seconds
+NoData    -1
+```
+
+A negative NoData marker is safe because valid physical arrival time is non-negative.
+
+### Terminal state raster
+
+```text
+0  UNBURNABLE / outside domain
+1  UNBURNED / in-domain but unreachable
+3  BURNED / eventually reached
+```
+
+The file is deliberately terminal state rather than an arbitrary burning-time snapshot.
+
+### Burned mask
+
+```text
+uint8
+0 / 1
+```
+
+### Perimeter GeoJSON
+
+The final burned raster footprint is polygonized in the raster CRS and then transformed to:
+
+```text
+EPSG:4326
+```
+
+before GeoJSON serialization. Projected raster coordinates are therefore not mislabeled as standard GeoJSON longitude/latitude coordinates.
+
+Rasterio integration tests write and read these outputs for real.
 
 ---
 
-## 4. Rothermel R1 implemented and validated
+## 5. Version-1 YAML configuration added
 
-Added explicit conversion helpers for:
+Runtime dependency added:
 
 ```text
-m ↔ ft
-kg/m² ↔ lb/ft²
-kg/m³ ↔ lb/ft³
-1/m ↔ 1/ft
-J/kg ↔ Btu/lb
-m/s ↔ ft/min
+PyYAML
 ```
 
-Implemented R1 pure functions:
+Implemented:
 
 ```text
-compute_surface_area_weights
-compute_characteristic_sav_m_inv
-compute_packing_ratio
-compute_bulk_density_kg_m3
-compute_optimum_packing_ratio
+StaticRasterInputPaths
+StaticRunConfig
+load_static_run_config
 ```
 
-The heterogeneous-fuel weighting tests use hand-computable synthetic inputs rather than taking another package as truth.
-
-The R1 baseline was confirmed green across:
+The version-1 config requires exactly ten static input rasters:
 
 ```text
-Ruff lint
-Ruff format
-quality pytest
-Python 3.11
-Python 3.12
-Python 3.13
+fuel_model
+dead_1h_moisture
+dead_10h_moisture
+dead_100h_moisture
+live_herbaceous_moisture
+live_woody_moisture
+midflame_wind_speed
+wind_from_direction
+slope
+aspect
 ```
 
----
+Configuration behavior:
 
-## 5. R2 scientific variant audited before implementation
+- relative paths resolve relative to the YAML file;
+- unknown top-level keys fail;
+- missing raster keys fail;
+- unknown raster keys fail;
+- ignition list must be non-empty;
+- output directory is explicit;
+- research-only neighborhood/interface switches are not exposed.
 
-Primary-source review separated the original Rothermel 1972 formulation from later operational corrections.
-
-PyFireCA now explicitly targets:
-
-> **Albini-adjusted Rothermel surface fire**
-
-Documented Albini 1976 adjustments include:
-
-1. combustible-loading correction;
-2. revised reaction-velocity exponent;
-3. revised live moisture-of-extinction calculation;
-4. revised combination of dead/live reaction intensities.
-
-Andrews 2018 is used as the modern consolidated consistency reference.
-
-No R2 equation chain was implemented before this variant decision was made.
-
----
-
-## 6. Validation evidence hierarchy introduced
-
-`docs/VALIDATION.md` now distinguishes:
+Example:
 
 ```text
-Grade A  primary/authoritative worked value
-Grade B  official operational software regression
-Grade C  independent implementation comparison
-Grade D  internal analytical/synthetic fixture
-```
-
-External values now require provenance instead of appearing as unexplained constants.
-
-### Grade A snapshot
-
-Added Albini 1976 worked examples:
-
-```text
-tests/validation/data/albini1976_worked_examples.csv
-```
-
-These provide future wind/slope whole-model checks but are not zero-wind/zero-slope R2 fixtures.
-
-### Grade B snapshot
-
-Pinned official USFS Fire Lab Behave 7 surface regression data:
-
-```text
-repository: firelab/behave-app
-commit: a3cfcd5903188d73445948af16644868225bb9d5
-source: behave-lib/test/csv/surface.csv
-```
-
-The snapshot is stored under:
-
-```text
-tests/validation/data/behave7_surface_reference.csv
-```
-
-Both external snapshots have SHA-based integrity tests.
-
-### Remaining R2 validation gap
-
-No precise external worked value with **both zero wind and zero slope** matching the selected Albini-adjusted R2 line has yet been locked.
-
-Do not fabricate a Grade A value from PyFireCA's own equations.
-
-Acceptable fallback if no primary worked value is found:
-
-```text
-pinned official Behave 7 build
-        ↓
-generate zero-wind/zero-slope case
-        ↓
-record as Grade B, not Grade A
+examples/static_run.yml
 ```
 
 ---
 
-## 7. GIS raster contract implemented
+## 6. Reproducible file workflow completed
 
-Added:
-
-```text
-src/pyfireca/gis.py
-tests/test_gis.py
-docs/GIS_DATA_CONTRACT.md
-```
-
-Core GIS objects/functions:
+Implemented:
 
 ```text
-RasterMetadata
-RasterAlignmentError
-validate_raster_alignment
-validate_named_raster_alignment
+load_static_landscape
+build_static_request_from_config
+validate_static_run
+run_static_config
+StaticRunArtifacts
 ```
 
-Current geometric alignment contract:
+Complete file path:
 
 ```text
-same shape
-+
-same canonical CRS
-+
-same full affine transform within explicit tolerance
+YAML
+→ ten GeoTIFFs
+→ strict alignment/unit/NoData/fuel validation
+→ LandscapeInput
+→ ignition events
+→ validated static simulator
+→ reproducible run directory
 ```
 
-The alignment layer never silently reprojects, resamples, shifts, or crops data.
+The landscape is loaded once for the request/run path; run metadata reuses the loaded landscape rather than reading the ten rasters a second time.
 
-NoData equality is optional because NoData representation and simulation semantics are separate questions.
+Input validation occurs before a new output directory is created.
 
-`docs/DESIGN.md` was updated with design decisions D009/D010 covering GIS alignment and validation provenance.
+Non-empty existing result directories are rejected rather than silently overwritten.
 
 ---
 
-## 8. Optional Rasterio adapter implemented
+## 7. Reproducible run directory completed
 
-`gis.py` now also exposes optional adapter functions:
-
-```text
-read_raster(path, band=1)
-write_raster(path, values, metadata)
-```
-
-Rasterio is imported lazily. Base `import pyfireca` therefore does not require the GIS extra.
-
-Current adapter behavior:
-
-- one raster band per call;
-- raw stored values are read;
-- CRS is required;
-- shape/CRS/affine/NoData metadata are returned explicitly;
-- writing uses one GeoTIFF band;
-- dtype, CRS, affine transform, and NoData are preserved;
-- no automatic parent-directory creation;
-- no reprojection/resampling/masking/imputation.
-
-Added:
+Current run contract:
 
 ```text
-tests/test_rasterio_io.py
+runs/<run>/
+├── config.resolved.yml
+├── metadata.json
+├── environment.json
+├── metrics.json
+├── log.txt
+└── outputs/
+    ├── arrival_time.tif
+    ├── state.tif
+    ├── burned_mask.tif
+    └── perimeter.geojson
 ```
 
-The dedicated GIS CI job installs:
+`metadata.json` records:
 
 ```text
-.[dev,gis]
+raster shape / CRS / transform / cell size
+ignition events
+fuel models encountered
+pinned catalogue source commit
+SHA-256 for every input raster
 ```
 
-and runs GIS contract + Rasterio round-trip tests.
+`environment.json` records:
 
-The GIS job successfully passed its adapter tests during this session.
+```text
+PyFireCA package version
+Python version
+platform
+Git commit when supplied by the execution environment
+```
+
+`metrics.json` is the **single canonical run-metrics file**. A duplicate copy under `outputs/` was removed before release freeze to avoid future inconsistency.
 
 ---
 
-## 9. CI observations and fixes
+## 8. CLI added
 
-CI was used continuously instead of treating engineering checks as final cleanup.
+The package now registers:
 
-Issues caught during development were engineering-format issues rather than scientific-test failures, including:
+```toml
+[project.scripts]
+pyfireca = "pyfireca.cli:main"
+```
 
-- long line in `grid.py`;
-- Ruff formatting of a regression array;
-- modern `collections.abc.Mapping` import;
-- formatter layout in `gis.py`;
-- formatting of selected tests.
+Commands:
 
-These were corrected without changing scientific semantics.
+```bash
+pyfireca validate config.yml
+pyfireca run config.yml
+```
 
-At the end of this log, the Rasterio-specific GIS job has passed. A final full workflow was re-triggered after the latest Ruff-format correction in `gis.py`; the first action in the next session should be to inspect the newest CI run and record its final conclusion in `STATUS.md` / `HANDOFF.md`.
+The CLI uses standard-library `argparse` rather than adding Typer/Click.
+
+It remains a thin boundary:
+
+```text
+CLI
+→ load_static_run_config
+→ validate_static_run / run_static_config
+```
+
+No scientific behavior or propagation equations are duplicated in CLI code.
+
+Unit tests verify CLI dispatch/error handling.
+
+A dedicated Rasterio integration test creates real temporary GeoTIFFs and runs both `validate` and `run` through the CLI entry function.
 
 ---
 
-## 10. Exact next work
+## 9. GIS end-to-end CI expanded
 
-### First action
-
-Inspect the newest GitHub Actions run.
-
-If a failure remains, determine whether it is:
+The dedicated GIS job now covers:
 
 ```text
-format/style
-software test
-scientific/reference test
-GIS optional-dependency test
+GIS metadata/alignment
+Rasterio input/output
+simulation spatial output round trip
+YAML → GeoTIFF → simulator → run directory
+real CLI validate/run workflow
 ```
 
-Do not change scientific equations to address an engineering-only failure.
+The complete file workflow has passed under the GIS job.
 
-### Scientific line
+Multiple intermediate red runs during development were Ruff formatting failures while Python/GIS functional tests were green. Scientific code was not altered merely to satisfy formatting.
 
-Continue R2 only after the fixture gate:
+---
+
+## 10. Packaging release gate added
+
+A new CI `package` job now requires:
 
 ```text
-external zero-wind + zero-slope reference
-        ↓
-Albini-adjusted formula-level functions
-        ↓
-validated no-wind/no-slope ROS
+wheel build
+source-distribution build
+clean wheel installation
+pyfireca --help from clean wheel
+import pyfireca from clean wheel
+clean built-wheel installation with [gis] extra
+import rasterio after [gis] installation
 ```
 
-Do not jump directly to wind/slope or Cell2Fire distance accumulation.
+This is intentionally stronger than editable-source testing and should catch missing package files, entry points, or optional-dependency metadata before tagging.
 
-### GIS line
+---
 
-After CI is green, synchronize the long-lived docs with the newly implemented adapter:
+## 11. Documentation synchronized
+
+Updated/added:
 
 ```text
-docs/GIS_DATA_CONTRACT.md
-  - mark Rasterio adapter implemented
-
-docs/DEVELOPMENT.md
-  - mark core GIS alignment + optional adapter complete
-
+README.md
+README.zh-CN.md
+docs/RUNNING_SIMULATOR.md
 docs/STATUS.md
-  - add GIS contract / adapter truth
-
 docs/HANDOFF.md
-  - add GIS API + CI state
+docs/SIMULATOR_ROADMAP.md
+docs/DEVELOPMENT.md
+docs/RELEASE_CHECKLIST.md
 CHANGELOG.md
-  - record GIS metadata/alignment/Rasterio adapter
 ```
 
-Then decide the next GIS semantic issue separately:
+README now describes the real static simulator rather than saying Rothermel is still future work.
+
+`docs/RUNNING_SIMULATOR.md` documents:
 
 ```text
-NoData → UNBURNABLE / masked / error / weather missing policy
+installation
+scientific assumptions
+required raster layers and units
+YAML schema
+ignition events
+validate/run CLI
+result directory
+GeoTIFF/GeoJSON semantics
+Python API
+baseline limitations
 ```
 
-Do not silently choose one global NoData meaning for every input layer.
+Research ideas remain isolated in:
+
+```text
+docs/FUTURE_RESEARCH.md
+```
 
 ---
 
-## 11. Files that should be read first next session
+## 12. Fixed baseline scope after this session
 
-In order:
+The first release baseline is:
 
 ```text
-1. docs/SESSION_LOG.md
-2. docs/STATUS.md
-3. docs/HANDOFF.md
-4. docs/ROTHERMEL_REFERENCE.md
-5. docs/VALIDATION.md
-6. docs/GIS_DATA_CONTRACT.md
-7. src/pyfireca/behavior/rothermel.py
-8. src/pyfireca/gis.py
+static weather
+north-up square metric raster
+strict aligned GeoTIFF inputs
+Anderson FM1–FM13 + GR1
+Albini-adjusted Rothermel
+Behave/Catchpole directional surface spread
+source-cell-controlled heterogeneous outgoing ROS
+immediate Moore-8 physical arrival propagation
+single/multiple/delayed ignition
+GeoTIFF + WGS84 GeoJSON output
+YAML + CLI + reproducible run directory
 ```
 
-This should be enough to continue without reconstructing development decisions from chat history.
+Explicitly not blockers:
+
+```text
+full Scott–Burgan 40 catalogue
+dynamic weather / WRF
+rotated/non-square geometry
+FBP
+crown fire
+spotting
+suppression
+Monte Carlo
+fireline intensity/flame length public output
+Numba/GPU
+new PyFireCA-specific CA methods
+```
+
+---
+
+## 13. Exact next work
+
+Do **not** resume lattice/interface/neighborhood method development yet.
+
+Next steps are release-readiness only:
+
+```text
+1. inspect the new package CI job
+2. fix packaging/metadata issues if it finds any
+3. review pyproject package metadata
+4. search documentation for stale pre-Rothermel/pre-CLI claims
+5. verify latest main CI all green simultaneously
+6. complete docs/RELEASE_CHECKLIST.md
+7. decide the first baseline tag/version only after all required checks pass
+```
+
+The next developer/session should begin with:
+
+```text
+docs/RELEASE_CHECKLIST.md
+docs/STATUS.md
+docs/HANDOFF.md
+docs/SIMULATOR_ROADMAP.md
+```
