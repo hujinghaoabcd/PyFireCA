@@ -1,71 +1,82 @@
 # PyFireCA Project Status
 
-> Updated: 2026-08-12
+> Updated: 2026-08-13
 >
-> Current milestone: **R8 — static spatial raster Rothermel coupling**
+> Current milestone: **S8/S9 — static baseline simulator release polish**
 
 ## Current position
 
-PyFireCA now has nine working foundations:
+PyFireCA now has a complete first-pass static simulator path rather than only a scientific kernel:
 
 ```text
-1. Wildfire CA reference core
-2. Fire-behavior/data contracts
-3. GIS landscape input/output baseline
-4. Validated Albini-adjusted Rothermel R1–R4 path
-5. Dynamic Scott–Burgan herbaceous curing/load transfer
-6. Audited standard-fuel catalogue subset
-7. Static physical travel-time / arrival-time propagation
-8. Behave-aligned surface ellipse → directional neighbor ROS → arrival coupling
-9. Static spatial raster layers → typed per-cell Rothermel → heterogeneous arrival
+YAML configuration
+        ↓
+10 aligned GeoTIFF input rasters
+        ↓
+strict GIS / unit / NoData / fuel validation
+        ↓
+explicit ignition events
+        ↓
+Albini-adjusted Rothermel
+        ↓
+Behave/Catchpole directional surface ROS
+        ↓
+static physical earliest-arrival propagation
+        ↓
+arrival / terminal state / burned footprint
+        ↓
+GeoTIFF + WGS84 GeoJSON outputs
+        ↓
+resolved config + hashes + metadata + metrics + log
 ```
 
-Current implemented path:
+The user can now drive the same baseline from either the Python API or:
+
+```bash
+pyfireca validate run.yml
+pyfireca run run.yml
+```
+
+The current priority is **release-quality baseline completion**. New PyFireCA-specific CA innovations remain recorded in `docs/FUTURE_RESEARCH.md` and are not being implemented until the simple simulator baseline is frozen.
+
+## Baseline capabilities now implemented
+
+### 1. CA reference core
+
+Available and tested:
 
 ```text
-aligned raster layers
-        ↓
-SpatialLayer / EnvironmentalData
-        ↓
-LandscapeInput
-        ↓
-StaticRasterRothermelInputsProvider
-        ↓
-per-source-cell RothermelInputs
-        ↓
-StaticSpatialRothermelDirectionalSpreadRate
-        ↓
-RothermelModel + Behave/Catchpole surface ellipse
-        ↓
-direction-specific outgoing neighbor ROS
-        ↓
-physical edge distance / ROS
-        ↓
+FireState
+RasterGrid
+MooreNeighborhood
+VonNeumannNeighborhood
+TransitionRule
+NeighborIgnitionRule
+Simulation
+```
+
+The original synchronous reference path remains step-count based. It has no hidden physical `dt`.
+
+### 2. Physical static arrival baseline
+
+Available:
+
+```text
 StaticArrivalTimeSolver
-        ↓
-earliest arrival time
-        ↓
-physical-time FireState snapshot
+arrival_times_to_state
+square-grid distance/bearing helpers
+direction-specific edge travel time
 ```
 
-The static GIS-to-arrival path is now implemented end to end for north-up square metric rasters. The next scientific CA boundary is no longer basic Rothermel or GIS assembly; it is controlled comparison of **edge coupling, neighborhood/grid discretization, and lattice bias**, followed later by an explicitly designed time-dependent weather scheduler.
+Physical propagation contract:
 
-## Completed foundations
+```text
+travel_time = physical_edge_distance / direction_specific_ROS
+```
 
-### CA core
+Long-range neighborhoods are not silently accepted by the physical arrival baseline because they could skip intermediate barriers.
 
-- `FireState`: `UNBURNABLE / UNBURNED / BURNING / BURNED`;
-- `RasterGrid`;
-- Moore and Von Neumann neighborhoods;
-- synchronous `TransitionRule` and `Simulation` reference path;
-- explicit NumPy RNG;
-- deterministic `NeighborIgnitionRule` architecture baseline;
-- `build_initial_state(domain_mask, ignition_mask)`;
-- synchronous no-cascade regression tests.
-
-The original synchronous `Simulation` remains unchanged. One CA step has no hidden physical duration.
-
-### Behavior/data/GIS boundary
+### 3. Fire-behavior/data/GIS contracts
 
 Implemented:
 
@@ -74,26 +85,23 @@ FireBehaviorModel
 FireBehaviorResult
 SpatialLayer
 EnvironmentalData
-require_complete_snapshot
+LandscapeInput
 RasterMetadata
 validate_raster_alignment
 read_raster / write_raster
 write_state_raster
-nodata_mask
-build_domain_mask
-LandscapeInput
+NoData/domain validation
 ```
 
-Static NoData becomes persistent domain semantics only when explicitly selected. Dynamic missing weather never silently creates permanent `UNBURNABLE` cells.
+Static domain semantics are explicit. Missing dynamic/static behavior data never silently become a different permanent fire state.
 
-## Rothermel validation status
+## Rothermel reference status
 
 ### R1 — heterogeneous fuel-bed quantities — complete
 
-Validated:
+Validated SI/native-unit handling and fuel-bed derived quantities include:
 
 ```text
-SI ↔ ft/lb/Btu/min conversions
 surface-area weights
 characteristic SAV
 packing ratio
@@ -101,7 +109,7 @@ bulk density
 optimum packing ratio
 ```
 
-Fixed class order:
+Fixed six-class order:
 
 ```text
 DEAD_1H
@@ -114,301 +122,360 @@ LIVE_WOODY
 
 ### R2 — Albini-adjusted base ROS — Grade B
 
-Pinned Behave 7 references:
+Pinned Behave references:
 
 ```text
-FM1 dead-only
+FM1
 4.4262698923571939 chains/h
 0.024733996158492002 m/s
 
-FM2 static dead + live
+FM2
 2.3810521029916596 chains/h
 0.013305319151517395 m/s
 ```
 
-### R3 — wind, slope, maximum-spread vector
+### R3 — wind/slope/maximum spread — Grade B
 
-Pinned references:
+Pinned references include:
 
 ```text
 FM1, 30% slope, zero wind
 20.817222076028628 chains/h
 
-FM1, zero slope, 100 ft/min direct-midflame wind
+FM1, zero slope, 100 ft/min DirectMidflame wind
 8.834274755440232 chains/h
 
-FM1, 30% slope + perpendicular 100 ft/min wind push
+FM1, 30% slope + perpendicular 100 ft/min wind
 21.399596624626479 chains/h maximum ROS
 ```
 
 Implemented:
 
-- slope factor;
-- wind factor;
-- effective-wind inversion;
-- optional wind-speed limit;
-- non-collinear wind/slope vector composition;
-- explicit wind-from/downwind and aspect/upslope direction conversions.
+```text
+slope factor
+wind factor
+effective-wind inversion
+optional wind-speed limit
+non-collinear wind/slope vector composition
+wind-from/downwind direction semantics
+aspect/upslope direction semantics
+```
 
-When wind limiting is enabled and exceeded, `effective_wind_speed_m_s` reports the **limited** effective wind, matching the Behave operational path and keeping ellipse shape consistent with the capped wind.
-
-### R4 — public model assembly — complete
+### R4 — public Rothermel model — complete
 
 ```text
 RothermelModel.compute(RothermelInputs)
-        ↓
-FireBehaviorResult
+→ FireBehaviorResult
 ```
 
-Stable outputs:
+Stable validated public behavior outputs currently emphasize:
 
 ```text
 spread_rate_m_s
 spread_direction_deg
 ```
 
-Zero wind + zero slope returns `spread_direction_deg=None`.
+Fireline intensity/flame length are not yet presented as validated public simulator outputs.
 
-`fireline_intensity_w_m` and `flame_length_m` remain `None` until separately validated.
+### R5 — dynamic herbaceous curing — Grade B
 
-## R5 — dynamic herbaceous curing — Grade B
-
-Pinned transfer rule:
+Pinned GR1 case:
 
 ```text
-M_live_herb < 0.30       transfer = 1.0
-0.30 <= M <= 1.20       transfer = 1.333 - 1.11*M
-M > 1.20                 transfer = 0.0
-```
-
-Pinned GR1 result:
-
-```text
-model        101 / GR1
-dead M       5/5/5 %
-live herb M  60 %
-live woody M 90 %
-wind/slope   0 / 0
-
+GR1 / model 101
+live herb moisture = 60%
+zero wind / zero slope
 0.71419316836403091 chains/h
 0.003990911424818205 m/s
 ```
 
-`RothermelModel.compute()` reproduces this result end to end.
+The dynamic herbaceous load-transfer path is integrated into the same Rothermel base equations rather than implemented as a separate model.
 
-## Audited standard-fuel catalogue
+## Standard fuel catalogue
 
-Current public audited subset:
-
-```text
-1    FM1
-2    FM2
-101  GR1
-```
-
-API:
+The audited public baseline now includes:
 
 ```text
-StandardFuelModelRecord
-available_standard_fuel_model_numbers()
-get_standard_fuel_model_record(number)
-get_standard_fuel_model(number)
+Anderson FM1–FM13
+Scott–Burgan GR1 (101)
 ```
 
-Records retain pinned native source values and convert explicitly to the SI `RothermelFuelModel` contract. Unknown models fail explicitly as not yet audited.
-
-## R6 — physical travel time and earliest arrival — complete baseline
-
-`pyfireca.propagation` provides:
+Anderson 13 values were audited directly against the pinned USFS Fire Lab Behave core file:
 
 ```text
-square_grid_neighbor_distance_m
-north_up_square_grid_offset_bearing_deg
-spread_travel_time_s
-square_grid_neighbor_travel_time_s
+src/behave/fuelModels.cpp
+commit 29888c7ad364aa18cfb340f4c25a8e395f24260f
 ```
 
-Contract:
+Tests verify:
 
-```text
-travel_time = physical_distance / direction_specific_ROS
-```
+- FM1–FM13 native source fields;
+- all Anderson models convert into the SI `RothermelFuelModel` contract;
+- all 13 can compute positive zero-wind/zero-slope spread under a valid test moisture set;
+- existing FM1/FM2/GR1 Grade B regressions remain unchanged;
+- unaudited codes fail explicitly.
 
-`north_up_square_grid_offset_bearing_deg()` is explicitly north-up only:
+The full Scott–Burgan 40 catalogue is **not required to block the first simple simulator release** and remains future catalogue work.
 
-```text
-row -1 → north
-col +1 → east
-row +1 → south
-col -1 → west
-```
+## Directional surface spread — Grade B
 
-`StaticArrivalTimeSolver` performs Dijkstra-style earliest-arrival propagation for static non-negative edge travel times.
-
-`arrival_times_to_state(..., time_s, burn_duration_s)` maps arrival fields to canonical `FireState` snapshots.
-
-## R7 — Behave-aligned directional surface spread — Grade B
-
-### Surface-fire ellipse
-
-Pinned Behave surface L/W relation:
+PyFireCA uses the pinned Behave/Catchpole ignition-point surface ellipse path:
 
 ```text
 L/W = 0.936 exp(0.1147 U) + 0.461 exp(-0.0692 U) - 0.397
-```
-
-where `U` is effective wind in mph. Surface L/W is capped at 8.
-
-Then:
-
-```text
 e = sqrt((L/W)^2 - 1) / (L/W)
-R_back = R_head * (1 - e) / (1 + e)
-R_flank = (R_head + R_back) / (2 * L/W)
 R(beta) = R_head * (1 - e) / (1 - e*cos(beta))
 ```
 
-The last expression is the pinned Behave `FromIgnitionPoint` path used for radial arrival propagation.
-
-### Grade B off-axis reference
-
-Dedicated pinned workflow:
-
-```text
-.github/workflows/behave7-r7-directional.yml
-```
-
-Case:
-
-```text
-FM1
-dead moisture 5/5/5%
-100 ft/min DirectMidflame wind
-zero slope
-90° from head
-SurfaceFireSpreadDirectionMode::FromIgnitionPoint
-```
-
-Official full-precision Behave result:
+Pinned FM1 90° off-axis case:
 
 ```text
 5.2277130003983068 chains/h
 0.02921246024622574 m/s
 ```
 
-The hardened workflow requires the raw value plus `172 passed / 0 failed`.
+The physical raster baseline never assigns head ROS to every neighbor.
 
-### Homogeneous directional provider
+## Static heterogeneous raster simulator
 
-`HomogeneousRothermelDirectionalSpreadRate` evaluates one static Rothermel state, caches its behavior and ellipse, converts north-up raster offsets to bearings, and returns the Behave-style radial ROS.
+### Input layers
 
-Verified FM1 100 ft/min values:
-
-```text
-east  / head      0.04936592733340002 m/s
-north / south     0.02921246024622574 m/s
-west  / backing   0.02074385430924511 m/s
-NE/SE / 45°       0.041067604539224284 m/s
-```
-
-Diagonal spread follows the ellipse; no `head_ROS*cos(theta)` shortcut is used.
-
-## R8 — static spatial raster coupling — implemented baseline
-
-### Per-source-cell heterogeneous behavior
-
-`StaticSpatialRothermelDirectionalSpreadRate` accepts:
+The version-1 static file workflow requires exactly:
 
 ```text
-inputs_provider(row, col) -> RothermelInputs
-```
-
-and caches one Rothermel behavior/ellipse state per evaluated source cell.
-
-The baseline edge semantic is explicit:
-
-> **The source cell determines the outgoing edge ROS.**
-
-No source/target averaging is hidden inside the provider. Alternative interface rules are future CA variants and must be implemented separately.
-
-Tests verify that when wind direction changes between adjacent source cells, the first edge can use head ROS while the next edge uses backing ROS. Earliest-arrival propagation therefore re-evaluates behavior by source cell rather than reusing one landscape-wide state.
-
-### Static raster input adapter
-
-Public API:
-
-```text
-RothermelRasterLayerNames
-StaticRasterRothermelInputsProvider
-```
-
-Default layers and exact units:
-
-```text
-fuel_model                   code / None
+fuel_model                   integer code
 dead_1h_moisture             fraction
 dead_10h_moisture            fraction
 dead_100h_moisture           fraction
 live_herbaceous_moisture     fraction
 live_woody_moisture          fraction
 midflame_wind_speed          m/s
-wind_from_direction          deg
-slope                        deg
-aspect                       deg
+wind_from_direction          degrees
+slope                        degrees
+aspect                       degrees
 ```
 
-The adapter never silently converts percent moisture, percent slope, 10-m wind, radians, or wind-height definitions.
+All files must share shape, CRS and full affine alignment.
 
-Only `domain_mask=True` cells are required to have complete Rothermel data. NoData outside the domain is legal; NoData/non-finite values inside the domain fail fast.
-
-Fuel codes must be integer-like and present in the audited catalogue.
-
-### Landscape convenience factory
-
-Public API:
+The baseline remains deliberately fail-closed:
 
 ```text
-build_static_raster_rothermel_arrival_solver(...)
+north-up only
+square cells only
+explicit metric cell_size_m
+cell_size_m must match affine pixel size
 ```
 
-This thin factory assembles:
+No percent/radian/wind-height conversions are hidden inside the adapter.
+
+### Per-cell behavior
 
 ```text
-LandscapeInput
-→ StaticRasterRothermelInputsProvider
+StaticRasterRothermelInputsProvider
 → StaticSpatialRothermelDirectionalSpreadRate
 → StaticArrivalTimeSolver
 ```
 
-It does not infer ignition, solve automatically, interpolate weather, or write outputs.
+Current baseline edge semantic:
 
-Current geometry is deliberately fail-closed:
+> **The source cell controls the outgoing edge ROS.**
 
-```text
-north-up only
-square pixels only
-positive x / negative y affine steps
-explicit cell_size_m
-cell_size_m must match affine pixel size
-```
+Alternative interface coupling remains a research comparison and is not a default CLI option.
 
-The caller explicitly asserts metric cell size because lightweight `RasterMetadata` does not parse CRS linear units.
+## User-facing simulator API
 
-Rotated, sheared, rectangular, or affine/cell-size-mismatched grids are rejected rather than approximated silently.
-
-### Example workflow
+New stable baseline objects:
 
 ```text
-examples/static_raster_rothermel.py
+IgnitionEvent
+build_ignition_times
+StaticWildfireSimulationRequest
+StaticWildfireSimulationResult
+run_static_wildfire_simulation
 ```
 
-The file-free example builds a 5×7 aligned environment, runs static Rothermel directional arrival, then converts the arrival field to a physical-time `FireState` snapshot. A smoke test executes the example so future API changes cannot silently break it.
-
-Detailed contract:
+Supported ignition use cases:
 
 ```text
-docs/STATIC_RASTER_WORKFLOW.md
+single ignition
+multiple simultaneous ignitions
+delayed ignition events
+duplicate events → earliest event wins
 ```
+
+`StaticWildfireSimulationResult` provides:
+
+```text
+arrival_times_s
+burned_mask
+burned_cell_count
+burned_area_m2
+first_arrival_s
+last_arrival_s
+unreachable_domain_cell_count
+state_at(...)
+burned_mask_at(...)
+summary_metrics()
+```
+
+## YAML configuration and CLI
+
+Runtime dependency:
+
+```text
+PyYAML
+```
+
+CLI intentionally uses the Python standard library `argparse`; no extra CLI framework was introduced.
+
+Public commands:
+
+```bash
+pyfireca validate config.yml
+pyfireca run config.yml
+```
+
+Configuration version 1 is strict:
+
+- unknown top-level keys fail;
+- all ten raster inputs are required;
+- relative paths resolve relative to the YAML file;
+- ignition list must be non-empty;
+- output directory is explicit;
+- the baseline CLI does not expose research-only CA variants.
+
+Example:
+
+```text
+examples/static_run.yml
+```
+
+Detailed guide:
+
+```text
+docs/RUNNING_SIMULATOR.md
+```
+
+## Reproducible run directory
+
+A completed file-based run now produces:
+
+```text
+runs/<run>/
+├── config.resolved.yml
+├── metadata.json
+├── environment.json
+├── metrics.json
+├── log.txt
+└── outputs/
+    ├── arrival_time.tif
+    ├── state.tif
+    ├── burned_mask.tif
+    └── perimeter.geojson
+```
+
+### Provenance
+
+`metadata.json` records:
+
+```text
+raster geometry
+ignition events
+fuel models encountered
+pinned catalogue source commit
+SHA-256 of every input raster
+```
+
+`environment.json` records:
+
+```text
+PyFireCA version
+Python version
+platform
+GitHub commit when supplied by the execution environment
+```
+
+### Spatial output semantics
+
+```text
+arrival_time.tif
+  float64 seconds
+  -1 file NoData for no finite arrival
+
+state.tif
+  terminal canonical state
+  0 UNBURNABLE
+  1 in-domain UNBURNED/unreachable
+  3 BURNED/reachable
+
+burned_mask.tif
+  uint8 0/1 eventual footprint
+
+perimeter.geojson
+  polygonized burned footprint
+  source CRS → WGS84 before serialization
+```
+
+Run statistics exist only once at the run root as `metrics.json`; they are not duplicated inside `outputs/`.
+
+## Integration/CI truth
+
+The repository now tests three levels:
+
+1. base unit/regression tests under Python 3.11/3.12/3.13;
+2. GIS read/write and output round trips with Rasterio;
+3. real file workflow and CLI integration using temporary GeoTIFF input sets.
+
+Recent functional runs confirm:
+
+```text
+Python 3.11  pass
+Python 3.12  pass
+Python 3.13  pass
+GIS workflow pass
+real YAML → GeoTIFF → simulator → outputs pass
+```
+
+Ruff lint/format remains a mandatory quality gate. A Ruff-only failure must not be misinterpreted as a scientific regression.
+
+## Fixed development priority
+
+The current priority is **not** to implement the previously identified lattice/interface innovations.
+
+Until the simple simulator baseline is frozen:
+
+```text
+complete user-facing workflow
+→ documentation
+→ release integration checks
+→ baseline tag/release preparation
+→ only then resume new CA research methods
+```
+
+Research ideas are stored in:
+
+```text
+docs/FUTURE_RESEARCH.md
+```
+
+and must remain separate from default simulator behavior.
+
+## Immediate next target
+
+The major simulator workflow is now present. Remaining baseline tasks are release polish rather than new fire science:
+
+```text
+1. keep final CI all green
+2. synchronize handoff/development/changelog docs
+3. add/refresh end-to-end examples and usage documentation
+4. review packaging and clean-install behavior
+5. perform one release-readiness audit
+6. freeze/tag the first simple static baseline when ready
+```
+
+Optional catalogue expansion, dynamic weather, WRF, FBP, crown fire, spotting,
+suppression, Monte Carlo, GPU work, and PyFireCA-specific CA innovations do not
+block this baseline milestone.
 
 ## Validation provenance
 
@@ -421,7 +488,7 @@ Grade C  independent implementation comparison
 Grade D  internal analytical/synthetic fixture
 ```
 
-Pinned revisions:
+Pinned upstream revisions:
 
 ```text
 firelab/behave-app
@@ -431,77 +498,20 @@ firelab/behave
 29888c7ad364aa18cfb340f4c25a8e395f24260f
 ```
 
-External workflows:
+External workflows remain under `.github/workflows/behave7-*`.
 
-```text
-.github/workflows/behave7-r2-probe.yml
-.github/workflows/behave7-r3-vector.yml
-.github/workflows/behave7-r5-dynamic-probe.yml
-.github/workflows/behave7-r7-directional.yml
-```
+## Deferred beyond the first static baseline
 
-## CI state
-
-Functional suites covering R1–R8, dynamic GR1, fuel catalogue, GIS, directional ellipse, physical travel/arrival, spatial raster adapters, landscape factory, and example workflow pass across the supported Python/GIS matrix in the latest functional runs. The canonical baseline remains the latest all-green post-format run; do not reinterpret a Ruff-only failure as a scientific regression.
-
-## Key decisions now fixed
-
-1. Fire behavior and propagation remain separate.
-2. One synchronous CA step has no hidden physical duration.
-3. Physical edge travel time requires direction-specific ROS.
-4. Maximum/head ROS is never silently assigned to all neighbors.
-5. Surface off-axis ROS uses the pinned Behave/Catchpole `FromIgnitionPoint` ellipse path.
-6. `FromPerimeter` directional rates are not used for ignition-point arrival propagation.
-7. Ellipse L/W uses effective wind; if wind limiting is active, it uses limited effective wind.
-8. North-up square-grid bearing/distance semantics are explicit.
-9. The current heterogeneous baseline uses **source-cell behavior for outgoing edges**.
-10. Source/target averaging, interface resistance, or other edge coupling are separate model hypotheses.
-11. Static raster units are explicit and never silently converted.
-12. Domain-exterior NoData is allowed; domain-interior required behavior data fail fast.
-13. The current static provider must not be mutated to fake dynamic weather.
-14. Fireline intensity/flame length remain outside validated public outputs.
-
-## Immediate next target
-
-R8 completes the static GIS-to-arrival baseline. The next work should now emphasize CA research rather than adding generic infrastructure:
-
-```text
-validated fire behavior                            ✓
-validated directional ellipse                      ✓
-static raster heterogeneous arrival                ✓
-        ↓
-controlled CA edge-coupling variants
-        ↓
-neighborhood / cell-size / lattice-bias experiments
-        ↓
-spread-shape and arrival-time error metrics
-        ↓
-only then design time-dependent weather scheduling
-```
-
-Candidate controlled variants should remain explicit, for example:
-
-```text
-source-cell-controlled edge ROS        current baseline
-source/target interface coupling       future variant
-4-neighbor / 8-neighbor / extended     future experiment
-cell-size sensitivity                  future experiment
-directional grid bias                  future experiment
-```
-
-Do not implement source/target averaging as an invisible tweak to the current provider.
-
-## Deferred work
-
-- full Anderson 13 and Scott–Burgan 40 catalogue audit;
+- remaining Scott–Burgan catalogue models;
 - affine-aware rotated/non-square raster geometry;
-- time-varying weather/event scheduler;
-- physical timestamp interpolation / NetCDF/xarray integration;
-- fireline intensity and flame length validation;
+- time-varying weather scheduler;
+- WRF/NetCDF/xarray integration;
+- fireline-intensity/flame-length public validation;
 - FBP;
 - crown fire;
 - spotting;
 - suppression;
 - Monte Carlo;
 - profiling-led Numba;
-- Torch/JAX/GPU/differentiable CA.
+- Torch/JAX/GPU/differentiable CA;
+- new PyFireCA-specific CA neighborhood/interface methods.
