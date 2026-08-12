@@ -47,5 +47,7 @@ The project follows a pre-1.0 semantic-versioning workflow. During early develop
 - The Rothermel public fuel contract uses a stable six-class representation before equation/catalogue implementation.
 - Rothermel receives midflame wind explicitly; canopy/exposure wind-adjustment logic is kept outside the core model input.
 - Unit conversion and R1 weighting/base calculations are separated from the R2 reaction/heat-transfer chain.
-- R2 no-wind/no-slope ROS will not be implemented until the selected Rothermel 1972 / Albini 1976 / Andrews 2018 correction set and authoritative reference fixtures are explicitly documented.
+- The R2 reference variant is explicitly **Albini-adjusted Rothermel** rather than an unlabelled mixture of original Rothermel 1972 and later operational corrections.
+- The Albini-adjusted R2 plan records four material adjustments before code: combustible loading, reaction-velocity exponent, revised live moisture of extinction, and dead/live reaction-intensity combination.
+- R2 no-wind/no-slope equations will not be assembled until authoritative numerical fixtures for the selected formulation are documented.
 - PyTorch/JAX/differentiable CA remain outside the current development scope.
