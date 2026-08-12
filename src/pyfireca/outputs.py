@@ -23,6 +23,7 @@ class StaticSimulationOutputPaths:
     arrival_time: Path
     state: Path
     burned_mask: Path
+    perimeter: Path
     metrics: Path
 
 
@@ -36,6 +37,72 @@ def terminal_state_from_result(result: StaticWildfireSimulationResult) -> np.nda
     state[result.domain_mask] = int(FireState.UNBURNED)
     state[result.burned_mask] = int(FireState.BURNED)
     return state
+
+
+def write_burned_perimeter_geojson(
+    result: StaticWildfireSimulationResult,
+    path: str | Path,
+) -> Path:
+    """Polygonize the eventual burned footprint and write RFC-7946 GeoJSON.
+
+    Raster cells are polygonized in the source raster CRS and then transformed
+    to WGS84 before serialization. This avoids writing projected coordinates
+    into a file format whose interoperable coordinate system is longitude/
+    latitude WGS84.
+    """
+
+    if not isinstance(result, StaticWildfireSimulationResult):
+        raise TypeError("result must be StaticWildfireSimulationResult")
+
+    try:
+        from rasterio.features import shapes
+        from rasterio.transform import Affine
+        from rasterio.warp import transform_geom
+    except ImportError as exc:
+        raise ImportError(
+            "burned perimeter output requires the optional GIS dependency; "
+            "install PyFireCA with the 'gis' extra"
+        ) from exc
+
+    burned = result.burned_mask.astype(np.uint8, copy=False)
+    affine = Affine(*result.metadata.transform)
+    features = []
+    for index, (geometry, value) in enumerate(
+        shapes(burned, mask=result.burned_mask, transform=affine),
+        start=1,
+    ):
+        if int(value) != 1:
+            continue
+        wgs84_geometry = transform_geom(
+            result.metadata.crs,
+            "EPSG:4326",
+            geometry,
+            antimeridian_cutting=True,
+            precision=12,
+        )
+        features.append(
+            {
+                "type": "Feature",
+                "id": index,
+                "properties": {"burned": 1},
+                "geometry": wgs84_geometry,
+            }
+        )
+
+    output = Path(path)
+    output.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": features,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return output
 
 
 def write_static_simulation_outputs(
@@ -62,6 +129,7 @@ def write_static_simulation_outputs(
         arrival_time=output_dir / "arrival_time.tif",
         state=output_dir / "state.tif",
         burned_mask=output_dir / "burned_mask.tif",
+        perimeter=output_dir / "perimeter.geojson",
         metrics=output_dir / "metrics.json",
     )
 
@@ -78,6 +146,7 @@ def write_static_simulation_outputs(
     burned = result.burned_mask.astype(np.uint8, copy=False)
     burned_metadata = replace(result.metadata, nodata=None)
     write_raster(paths.burned_mask, burned, burned_metadata)
+    write_burned_perimeter_geojson(result, paths.perimeter)
 
     paths.metrics.write_text(
         json.dumps(result.summary_metrics(), indent=2, sort_keys=True) + "\n",
