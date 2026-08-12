@@ -68,8 +68,15 @@ def test_synchronous_update_prevents_same_step_cascade() -> None:
     assert np.array_equal(
         sim.grid.state,
         np.array(
-            [[FireState.BURNED, FireState.BURNING, FireState.UNBURNED,
-              FireState.UNBURNED, FireState.UNBURNED]],
+            [
+                [
+                    FireState.BURNED,
+                    FireState.BURNING,
+                    FireState.UNBURNED,
+                    FireState.UNBURNED,
+                    FireState.UNBURNED,
+                ]
+            ],
             dtype=np.uint8,
         ),
     )
