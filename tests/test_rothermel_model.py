@@ -164,9 +164,10 @@ def test_optional_wind_limit_caps_high_effective_wind_without_changing_direction
         limited.diagnostics["wind_speed_limit_m_s"],
         rel=1e-13,
     )
-    assert unlimited.diagnostics["effective_wind_speed_m_s"] > limited.diagnostics[
-        "effective_wind_speed_m_s"
-    ]
+    assert (
+        unlimited.diagnostics["effective_wind_speed_m_s"]
+        > limited.diagnostics["effective_wind_speed_m_s"]
+    )
     assert limited.diagnostics["wind_limit_enabled"] == 1.0
     assert limited.diagnostics["wind_limit_exceeded"] == 1.0
     assert unlimited.diagnostics["wind_limit_enabled"] == 0.0
