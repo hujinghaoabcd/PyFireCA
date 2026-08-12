@@ -1,10 +1,15 @@
-name: Behave 7 R5 dynamic fuel probe
+name: Behave 7 R5 dynamic fuel regression
 
 on:
   workflow_dispatch:
   push:
     paths:
       - ".github/workflows/behave7-r5-dynamic-probe.yml"
+      - "src/pyfireca/behavior/_rothermel_dynamic.py"
+      - "src/pyfireca/behavior/_rothermel_base.py"
+      - "src/pyfireca/behavior/rothermel_model.py"
+      - "tests/test_rothermel_r5_dynamic.py"
+      - "tests/test_rothermel_model.py"
 
 permissions:
   contents: read
@@ -55,13 +60,14 @@ jobs:
             -DBEHAVE_HTML=OFF
           cmake --build behave-build --target testSurface --parallel 2
 
-      - name: Probe GR1 at 60 percent live-herb moisture
+      - name: Verify GR1 at 60 percent live-herb moisture
         shell: bash
         run: |
           cat > gr1_dynamic_60pct.csv <<'CSV'
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
-          101,5.0,5.0,5.0,60.0,90.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,-1.0
+          101,5.0,5.0,5.0,60.0,90.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,0.71419316836403091
           CSV
 
-          echo "Probe is intentionally expected to fail once so observed pinned Behave ROS is visible."
-          ./behave-build/testSurface gr1_dynamic_60pct.csv | tee behave7_gr1_dynamic_probe.log
+          ./behave-build/testSurface gr1_dynamic_60pct.csv | tee behave7_gr1_dynamic_reference.log
+          grep -q "Total tests passed: 1" behave7_gr1_dynamic_reference.log
+          grep -q "Total tests failed: 0" behave7_gr1_dynamic_reference.log
