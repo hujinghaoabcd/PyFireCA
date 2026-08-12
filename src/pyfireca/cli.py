@@ -60,7 +60,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_validate(args.config)
         if args.command == "run":
             return _run_simulation(args.config)
-    except Exception as exc:  # noqa: BLE001 - CLI boundary converts failures to exit status.
+    except Exception as exc:
         print(f"pyfireca: error: {exc}", file=sys.stderr)
         return 2
 
