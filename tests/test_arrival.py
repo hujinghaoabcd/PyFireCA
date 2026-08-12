@@ -207,30 +207,38 @@ def test_arrival_snapshot_tracks_unburned_burning_burned_and_unburnable() -> Non
     at_10 = arrival_times_to_state(domain, arrival, time_s=10.0, burn_duration_s=10.0)
     at_15 = arrival_times_to_state(domain, arrival, time_s=15.0, burn_duration_s=10.0)
 
-    assert at_4.tolist() == [[
-        FireState.BURNING,
-        FireState.UNBURNED,
-        FireState.UNBURNED,
-        FireState.UNBURNABLE,
-    ]]
-    assert at_5.tolist() == [[
-        FireState.BURNING,
-        FireState.BURNING,
-        FireState.UNBURNED,
-        FireState.UNBURNABLE,
-    ]]
-    assert at_10.tolist() == [[
-        FireState.BURNED,
-        FireState.BURNING,
-        FireState.UNBURNED,
-        FireState.UNBURNABLE,
-    ]]
-    assert at_15.tolist() == [[
-        FireState.BURNED,
-        FireState.BURNED,
-        FireState.UNBURNED,
-        FireState.UNBURNABLE,
-    ]]
+    assert at_4.tolist() == [
+        [
+            FireState.BURNING,
+            FireState.UNBURNED,
+            FireState.UNBURNED,
+            FireState.UNBURNABLE,
+        ]
+    ]
+    assert at_5.tolist() == [
+        [
+            FireState.BURNING,
+            FireState.BURNING,
+            FireState.UNBURNED,
+            FireState.UNBURNABLE,
+        ]
+    ]
+    assert at_10.tolist() == [
+        [
+            FireState.BURNED,
+            FireState.BURNING,
+            FireState.UNBURNED,
+            FireState.UNBURNABLE,
+        ]
+    ]
+    assert at_15.tolist() == [
+        [
+            FireState.BURNED,
+            FireState.BURNED,
+            FireState.UNBURNED,
+            FireState.UNBURNABLE,
+        ]
+    ]
 
 
 def test_arrival_snapshot_uses_uint8_canonical_state_codes() -> None:
