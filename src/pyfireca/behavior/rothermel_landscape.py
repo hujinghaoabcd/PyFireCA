@@ -42,9 +42,7 @@ def _validate_north_up_square_metric_grid(
     ):
         raise ValueError("static raster Rothermel arrival currently requires a north-up grid")
     if a <= 0.0 or e >= 0.0:
-        raise ValueError(
-            "north-up raster transform must have positive x step and negative y step"
-        )
+        raise ValueError("north-up raster transform must have positive x step and negative y step")
     if not isclose(a, cell_size_m, rel_tol=0.0, abs_tol=1e-9) or not isclose(
         -e,
         cell_size_m,
