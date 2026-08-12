@@ -47,7 +47,7 @@ pytest
 pre-commit run --all-files
 ```
 
-CI currently repeats quality checks and pytest on Python 3.11, 3.12, and 3.13.
+CI repeats quality checks and pytest on Python 3.11, 3.12, and 3.13.
 
 ## 4. Milestones
 
@@ -86,7 +86,7 @@ Exit criterion is met for the architectural reference core. This milestone does 
 
 ### Milestone C — behavior and environmental data contracts
 
-**Status: current; core contract largely complete.**
+**Status: common numerical contract complete; GIS-specific contract remains deferred.**
 
 Common boundary:
 
@@ -111,38 +111,83 @@ First behavior-family contract:
 - [x] contract tests;
 - [x] detailed `ROTHERMEL_REFERENCE.md` plan.
 
-Remaining contract/GIS work:
+Deferred GIS/data items:
 
 - [ ] CRS / affine-transform / extent alignment contract;
 - [ ] optional Rasterio read/write adapter;
 - [ ] explicit GIS NoData → unburnable/masked policy;
 - [ ] physical timestamp / interpolation policy when a real weather integration begins.
 
-The generic behavior result contract should not be redesigned merely to make one equation implementation convenient.
+These deferred GIS tasks must not block fire-behavior validation. The generic behavior result contract should not be redesigned merely to make one equation implementation convenient.
 
 ### Milestone D — validated Rothermel reference implementation
 
-**Next scientific milestone.**
-
-Implement in small independently testable stages:
+**Status: active. R1 complete; R2 reference variant fixed; authoritative R2 fixtures next.**
 
 #### R1 — units and base fuel quantities
 
-- [ ] exact/native unit-conversion helpers needed by the published equation path;
-- [ ] conversion tests;
-- [ ] surface-area weighting / characteristic fuel quantities;
-- [ ] bulk density / packing ratio / optimum packing ratio;
-- [ ] formula-level tests.
+- [x] exact/native unit-conversion helpers needed by the published equation path;
+- [x] conversion tests;
+- [x] heterogeneous surface-area weighting;
+- [x] characteristic SAV;
+- [x] bulk density;
+- [x] packing ratio;
+- [x] optimum packing ratio;
+- [x] formula-level hand-computable tests;
+- [x] CI green across Ruff/pytest and Python 3.11/3.12/3.13.
 
-#### R2 — no-wind / no-slope surface ROS
+R1 is the stable scientific baseline. Do not fold the R2 reaction/heat-transfer chain into these functions.
 
-- [ ] moisture damping;
+#### R2a — reference-variant audit
+
+- [x] compare original Rothermel 1972 path with Albini 1976 corrections;
+- [x] verify Andrews 2018 describes modern operational use as Rothermel with Albini adjustments;
+- [x] name PyFireCA's R2 target **Albini-adjusted Rothermel**;
+- [x] document Albini combustible-load correction;
+- [x] document Albini reaction-velocity exponent correction;
+- [x] document Albini revised live moisture-of-extinction treatment;
+- [x] document Albini dead/live reaction-intensity combination change.
+
+Do not refer to the upcoming implementation simply as “Rothermel 1972” when these later operational adjustments are active.
+
+#### R2b — authoritative no-wind/no-slope fixtures
+
+**Current scientific gate.**
+
+- [ ] identify at least one authoritative worked/numeric reference case whose assumptions match the Albini-adjusted formulation;
+- [ ] record all input quantities and native units;
+- [ ] record expected intermediate values when the source provides them;
+- [ ] record expected no-wind/no-slope ROS;
+- [ ] preserve citation/provenance in a dedicated test fixture or validation document;
+- [ ] add a second independent comparison path where possible.
+
+A fixture computed only by SimFire/Pyretechnics is not authoritative enough to define the model. Existing software may be used as the secondary comparison after the primary-source fixture is locked.
+
+#### R2c — formula-level pure functions
+
+Implement only after R2b is sufficiently specified:
+
+- [ ] combustible/net fuel loading;
 - [ ] mineral damping;
-- [ ] reaction velocity/intensity;
+- [ ] moisture damping;
+- [ ] Albini-adjusted live moisture of extinction;
+- [ ] Albini reaction-velocity exponent;
+- [ ] maximum/actual reaction velocity;
+- [ ] dead and live reaction intensity;
 - [ ] propagating flux ratio;
-- [ ] effective heating / heat of preignition;
-- [ ] base ROS;
-- [ ] authoritative numeric fixture.
+- [ ] effective heating number;
+- [ ] heat of preignition;
+- [ ] heat source/sink.
+
+Every function must identify the scientific source/equation convention in its docstring or adjacent documentation and receive direct tests before assembly.
+
+#### R2d — no-wind / no-slope surface ROS
+
+- [ ] assemble the validated scalar chain;
+- [ ] compare against authoritative fixture(s);
+- [ ] compare against independent software only under matching assumptions;
+- [ ] diagnose discrepancies rather than weakening tolerances;
+- [ ] preserve SI public output and explicit legacy-unit boundaries.
 
 #### R3 — wind and slope
 
@@ -259,7 +304,7 @@ For every scientific component:
 1. identify primary source equations
 2. document assumptions / units / conventions
 3. define input and output contracts
-4. prepare reference fixtures where possible
+4. prepare authoritative reference fixtures where possible
 5. implement readable reference functions
 6. add formula-level tests
 7. add complete reference calculation
