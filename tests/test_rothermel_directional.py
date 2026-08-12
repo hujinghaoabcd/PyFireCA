@@ -50,7 +50,10 @@ def _seed(shape: tuple[int, int], row: int, col: int) -> np.ndarray:
         ((-1, -1), 315.0),
     ],
 )
-def test_north_up_neighbor_offset_bearings(offset: tuple[int, int], expected_bearing: float) -> None:
+def test_north_up_neighbor_offset_bearings(
+    offset: tuple[int, int],
+    expected_bearing: float,
+) -> None:
     assert north_up_square_grid_offset_bearing_deg(offset) == pytest.approx(expected_bearing)
 
 
