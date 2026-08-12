@@ -8,12 +8,12 @@
 
 PyFireCA uses GIS data without allowing GIS file formats to define the numerical CA engine.
 
-The current boundary is:
+Current boundary:
 
 ```text
 GeoTIFF
   ↓
-Rasterio adapter (optional dependency)
+Rasterio adapter (optional)
   ↓
 ndarray + RasterMetadata
   ↓
@@ -21,14 +21,16 @@ explicit raster alignment
   ↓
 SpatialLayer / EnvironmentalData
   ↓
-explicit domain-mask semantics
+static NoData → explicit domain mask
   ↓
 LandscapeInput
   ↓
-RasterGrid + CA simulation
+RasterGrid + Simulation
+  ↓
+canonical state GeoTIFF
 ```
 
-The engine must never discover during a simulation that two inputs use different grids or that NoData semantics were guessed implicitly.
+The engine must not discover mid-simulation that inputs use different grids or that missing-data semantics were guessed implicitly.
 
 ## 2. `RasterMetadata`
 
@@ -48,7 +50,7 @@ x = a * col + b * row + c
 y = d * col + e * row + f
 ```
 
-The CA/core data modules therefore do not need Rasterio/GDAL objects.
+The CA/data core therefore does not depend on Rasterio/GDAL objects.
 
 ## 3. Alignment definition
 
@@ -57,89 +59,116 @@ Two raster layers are geometrically aligned only when these agree:
 ```text
 shape
 CRS
-six affine coefficients within an explicit tolerance
+all six affine coefficients within an explicit tolerance
 ```
 
 `validate_raster_alignment()` and `validate_named_raster_alignment()` fail closed. They never reproject, resample, crop, shift, or change CRS.
 
-Equal shape and nominal resolution alone are insufficient because two rasters can be offset by part of a cell while reporting the same pixel size.
-
-Default transform comparison uses:
+Default transform comparison:
 
 ```text
 absolute_tolerance = 1e-9
 relative_tolerance = 0
 ```
 
-This tolerance is only for floating-point serialization noise.
+This tolerance is for floating-point representation noise only.
 
 ## 4. CRS and resolution
 
-Rasterio canonicalizes source CRS before `RasterMetadata` is constructed. The lightweight core compares that canonical string exactly rather than implementing its own CRS parser.
+Rasterio canonicalizes source CRS before `RasterMetadata` is constructed. The core compares that canonical string exactly rather than implementing a partial CRS parser.
 
-`RasterMetadata.resolution` returns pixel-axis vector magnitudes:
+`RasterMetadata.resolution` returns pixel-axis magnitudes:
 
 ```text
 x_resolution = sqrt(a² + d²)
 y_resolution = sqrt(b² + e²)
 ```
 
-This also works for rotated transforms, but complete alignment still uses all six affine coefficients.
+Complete alignment still checks the full affine transform.
 
 ## 5. Rasterio adapter
 
-Rasterio remains an optional dependency:
+Rasterio remains optional:
 
 ```bash
 pip install -e ".[gis]"
 ```
 
-Implemented adapter functions:
+Implemented:
 
 ```text
 read_raster(path, band=1)
-    → ndarray + RasterMetadata
-
 write_raster(path, values, metadata)
-    → one-band GeoTIFF
+write_state_raster(path, state, metadata)
 ```
 
-The adapter preserves source values, dtype, CRS, transform, and NoData metadata. It does not mask, fill, reproject, resample, or change units.
+`read_raster()` / `write_raster()` preserve stored values, dtype, CRS, transform, and NoData metadata without masking, filling, reprojection, resampling, or unit conversion.
 
-An independent GitHub Actions `gis` job installs the optional dependency and executes generated-GeoTIFF integration tests.
+A dedicated GitHub Actions `gis` job installs `.[dev,gis]` and runs generated-GeoTIFF integration tests.
 
-## 6. NoData is metadata before it is simulation semantics
+## 6. NoData is metadata before simulation semantics
 
-The generic rule is:
+General rule:
 
 > **NoData does not automatically mean `FireState.UNBURNABLE`.**
 
 `SpatialLayer.nodata` stores an explicit marker. `nodata_mask()` checks only that declared marker:
 
-- sentinel values such as `-9999` are supported;
+- sentinels such as `-9999` are supported;
 - a declared `NaN` marker is supported;
-- arbitrary NaN values are **not** silently treated as NoData when `nodata=None`.
+- arbitrary NaN is not silently classified as NoData when `nodata=None`.
 
-This prevents generic data containers from making domain/science decisions on behalf of a model.
+This prevents generic data containers from making domain decisions on behalf of a wildfire model.
 
 ## 7. Persistent simulation domain
 
-`build_domain_mask(environment, layer_names)` defines the initial persistent domain deliberately.
+`build_domain_mask(environment, layer_names)` defines the persistent domain deliberately.
 
 Rules:
 
 1. the caller explicitly names which layers define the domain;
 2. those layers must be static `(Y, X)` layers;
-3. a cell is valid only when none of the selected layers contains its declared NoData value;
-4. dynamic `(T, Y, X)` weather/moisture layers are rejected as domain-defining layers.
+3. a cell is valid only when none of the selected layers contains its declared NoData marker;
+4. dynamic `(T, Y, X)` layers are rejected as domain-defining layers.
 
-The dynamic-layer restriction is important. Missing wind at one time index must not silently convert a geographic cell into a permanently unburnable location.
+The dynamic-layer restriction prevents one missing weather value from permanently converting a geographic cell into an unburnable cell.
 
-Dynamic missing-data handling remains a separate future weather-data policy (failure, interpolation, masking, or another explicit strategy).
+## 8. Dynamic weather completeness policy
 
-## 8. Domain mask → CA state
+PyFireCA now provides an explicit **fail-fast baseline** without imposing interpolation globally:
 
-`state.build_initial_state()` owns the state-level conversion:
+```python
+snapshot = environment.require_complete_snapshot(
+    ["wind_speed", "wind_direction", "fuel_moisture"],
+    time_index=t,
+)
+```
+
+This method:
+
+- checks only the explicitly requested required layers;
+- rejects declared NoData cells;
+- rejects additional non-finite values such as unmarked NaN/Inf;
+- reports layer name, time index, and unusable-cell counts;
+- does not fill, interpolate, mask, or change the persistent domain.
+
+The ordinary `snapshot()` method remains policy-free.
+
+This establishes a safe default boundary for future WRF/NetCDF integration:
+
+```text
+weather preprocessing / interpolation (if explicitly chosen)
+        ↓
+require_complete_snapshot()
+        ↓
+fire behavior calculation
+```
+
+Interpolation rules are still deferred until a concrete time-coordinate/weather-source integration exists.
+
+## 9. Domain mask → CA state
+
+`state.build_initial_state()` owns state conversion:
 
 ```text
 domain_mask == False  → UNBURNABLE
@@ -147,27 +176,27 @@ domain_mask == True   → UNBURNED
 ignition_mask == True → BURNING
 ```
 
-The function requires boolean two-dimensional masks and rejects ignition outside the valid domain.
+It requires boolean 2-D masks and rejects ignition outside the valid domain.
 
-It does **not** inspect GIS NoData itself. This keeps the responsibilities separated:
+Responsibilities therefore remain separate:
 
 ```text
 GIS/data policy → domain mask
 state policy    → initial CA state
 ```
 
-## 9. `LandscapeInput`
+## 10. `LandscapeInput`
 
-`src/pyfireca/data.py` now defines the first user-facing landscape assembly object:
+`src/pyfireca/data.py` defines:
 
 ```text
 LandscapeInput
 ├── environment: EnvironmentalData
 ├── metadata: RasterMetadata
-└── initial_state: integer (Y, X) array
+└── initial_state: integer (Y, X)
 ```
 
-Construction validates:
+Invariant:
 
 ```text
 environment.spatial_shape
@@ -175,7 +204,7 @@ environment.spatial_shape
 == initial_state.shape
 ```
 
-Convenience constructor:
+Convenience assembly:
 
 ```python
 landscape = LandscapeInput.from_domain_layers(
@@ -186,56 +215,65 @@ landscape = LandscapeInput.from_domain_layers(
 )
 ```
 
-The result has one authoritative geospatial metadata object instead of duplicating CRS/transform on every environmental layer.
+One authoritative geospatial metadata object is shared instead of duplicating CRS/transform on every layer.
 
-## 10. Relationship to `RasterGrid`
+## 11. Relationship to `RasterGrid`
 
 `LandscapeInput.make_grid()` creates an independent `RasterGrid` from the stored initial state.
 
-It deliberately leaves `RasterGrid.cell_size=None`. A scalar cell size cannot represent every valid affine grid (for example rectangular or rotated pixels), so PyFireCA does not infer one from GIS metadata prematurely.
+`RasterGrid.cell_size` is intentionally left unset because a single scalar cannot safely represent every valid affine grid, including rectangular or rotated pixels.
 
-The geospatial metadata remain owned by `LandscapeInput`; evolving CA state remains owned by `RasterGrid`/`Simulation`.
+Geospatial metadata remain with `LandscapeInput`; evolving state remains with `RasterGrid` / `Simulation`.
 
-## 11. Current validation coverage
+## 12. State GeoTIFF convention
 
-Core GIS/data tests now cover:
+`write_state_raster()` defines the first model-output format:
 
-- positive raster dimensions;
-- CRS and finite affine validation;
-- rotated/north-up resolution;
-- shape/CRS/transform mismatch rejection;
-- explicit transform tolerance;
-- optional NoData equality during geometric checks;
+```text
+dtype          uint8
+state codes    0..3
+GeoTIFF NoData None
+```
+
+`FireState.UNBURNABLE == 0` remains a real model state. It is never reinterpreted as file-level NoData, and source sentinels such as `-9999` are not propagated into state output.
+
+Arrival-time output remains separate and will receive its own convention when arrival time is implemented.
+
+## 13. Current validation coverage
+
+Tests now cover:
+
+- raster shape/CRS/affine validation;
+- north-up and rotated resolution;
+- alignment mismatch and tolerance behavior;
 - Rasterio read/write round trip;
-- CRS, affine, NoData and dtype preservation;
-- explicit sentinel and NaN NoData masks;
-- no implicit NaN inference without a marker;
-- multi-layer persistent domain construction;
+- CRS/affine/NoData/dtype preservation;
+- sentinel and NaN NoData masks;
+- no implicit NaN→NoData inference;
+- static multi-layer domain construction;
 - rejection of dynamic domain-defining layers;
-- domain/ignition → canonical fire-state mapping;
-- rejection of ignition outside domain;
-- `LandscapeInput` shape consistency;
-- independent `RasterGrid` creation.
+- domain/ignition → CA-state conversion;
+- ignition-outside-domain rejection;
+- `LandscapeInput` shape invariants and independent grid creation;
+- fail-fast required dynamic snapshots;
+- declared dynamic NoData rejection;
+- unmarked non-finite dynamic-value rejection;
+- canonical state GeoTIFF dtype/state/NoData behavior.
 
-The latest implementation commit is green in the quality, GIS, and Python 3.11/3.12/3.13 CI jobs.
-
-## 12. Remaining GIS/data work
+## 14. Remaining GIS/data work
 
 Not implemented yet:
 
 ```text
-multi-file landscape loader
-explicit preprocessing/reprojection helper
-GeoTIFF convention for state / arrival-time outputs
-dynamic weather missing-data policy
 physical timestamps and temporal interpolation
+high-level multi-file landscape loader
+explicit preprocessing/reprojection helper
+arrival-time output convention
 NetCDF/xarray adapter if a concrete weather integration requires it
 ```
 
 No new abstraction should be added merely to anticipate these items.
 
-## 13. Design rule
+## 15. Design rule
 
-**GIS preprocessing may intentionally transform data; CA simulation may not silently transform its grid or invent missing-data semantics.**
-
-This remains the central reproducibility boundary for PyFireCA spatial inputs.
+**GIS preprocessing may intentionally transform data; CA simulation may not silently transform its grid, invent domain semantics, or repair missing weather.**
