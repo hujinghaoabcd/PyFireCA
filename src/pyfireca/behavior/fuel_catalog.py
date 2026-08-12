@@ -64,9 +64,7 @@ class StandardFuelModelRecord:
         return RothermelFuelModel(
             code=self.number,
             depth_m=feet_to_metres(self.depth_ft),
-            dead_moisture_of_extinction_fraction=(
-                self.dead_moisture_of_extinction_fraction
-            ),
+            dead_moisture_of_extinction_fraction=(self.dead_moisture_of_extinction_fraction),
             loads_kg_m2=(
                 lb_ft2_to_kg_m2(self.dead_1h_load_lb_ft2),
                 lb_ft2_to_kg_m2(self.dead_10h_load_lb_ft2),
