@@ -119,7 +119,7 @@ R1 tests cover:
 - zero derived quantities for a nonburnable fuel model;
 - negative-input rejection.
 
-The R1 scientific tests pass on Python 3.11, 3.12, and 3.13. During this implementation pass, CI failures encountered were Ruff-only style issues in test assertions; the flagged assertions have been corrected and the latest CI is being re-verified after that style fix.
+The R1 baseline is fully green in GitHub Actions: Ruff lint, Ruff format, the quality pytest run, and the Python 3.11/3.12/3.13 test matrix all pass on commit `793c393`.
 
 ## Key decisions now implemented
 
