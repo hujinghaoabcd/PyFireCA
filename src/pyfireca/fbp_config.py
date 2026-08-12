@@ -181,8 +181,7 @@ def load_static_fbp_run_config(path: str | Path) -> StaticFBPRunConfig:
     if unknown:
         raise ValueError(f"unknown FBP input raster keys: {sorted(unknown)}")
     input_kwargs = {
-        name: _path(raw_inputs[name], base=base, label=f"inputs.{name}")
-        for name in _FBP_INPUT_KEYS
+        name: _path(raw_inputs[name], base=base, label=f"inputs.{name}") for name in _FBP_INPUT_KEYS
     }
     inputs = StaticFBPRasterInputPaths(**input_kwargs)
 
