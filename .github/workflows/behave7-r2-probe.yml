@@ -47,10 +47,7 @@ jobs:
           run_needle = "  // Perform Run\n  behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"
           run_replacement = """  // Enable the optional operational wind limit only for the dedicated
           // 1000 ft/min reference row. Scientific equation/core sources remain unchanged.
-          if (inputs.windSpeedUnits == SpeedUnits::FeetPerMinute && inputs.windSpeed == 1000.0)
-          {
-            behaveRun.surface.setIsWindLimitEnabled(true);
-          }
+          behaveRun.surface.setIsWindLimitEnabled(inputs.windSpeed == 1000.0);
 
           // Perform Run
           behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"""
