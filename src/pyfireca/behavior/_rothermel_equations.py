@@ -42,6 +42,71 @@ def compute_combustible_load(
     return oven_dry_load * (1.0 - total_mineral_fraction)
 
 
+def compute_size_sorted_weighted_combustible_load(
+    loads: Sequence[float],
+    sav_m_inv: Sequence[float],
+    within_surface_area_weights: Sequence[float],
+    total_mineral_fractions: Sequence[float],
+) -> float:
+    """Return operational size-bin-weighted combustible load.
+
+    Rothermel/Behave groups fuel particles into five SAV classes before
+    weighting net load. Bin boundaries are expressed in inverse feet:
+    ``>=1200``, ``>=192``, ``>=96``, ``>=48``, and ``>=16``. Each particle's
+    net load is multiplied by the summed within-life-state surface-area
+    fraction of its SAV bin.
+
+    The calculation is unit-preserving for fuel load.
+    """
+
+    _require_equal_lengths(
+        "size-sorted fuel",
+        loads,
+        sav_m_inv,
+        within_surface_area_weights,
+        total_mineral_fractions,
+    )
+
+    bin_totals = [0.0] * 5
+    particle_bins: list[int | None] = []
+    for sav, weight in zip(sav_m_inv, within_surface_area_weights, strict=True):
+        _require_finite_nonnegative("sav_m_inv", sav)
+        _require_finite_nonnegative("within_surface_area_weight", weight)
+        if weight > 1.0:
+            raise ValueError("within_surface_area_weight must be in [0, 1]")
+
+        sav_ft_inv = m_inv_to_ft_inv(sav) if sav > 0.0 else 0.0
+        if sav_ft_inv >= 1200.0:
+            bin_index = 0
+        elif sav_ft_inv >= 192.0:
+            bin_index = 1
+        elif sav_ft_inv >= 96.0:
+            bin_index = 2
+        elif sav_ft_inv >= 48.0:
+            bin_index = 3
+        elif sav_ft_inv >= 16.0:
+            bin_index = 4
+        else:
+            bin_index = None
+        particle_bins.append(bin_index)
+        if bin_index is not None:
+            bin_totals[bin_index] += weight
+
+    weighted_load = 0.0
+    for load, mineral, bin_index in zip(
+        loads,
+        total_mineral_fractions,
+        particle_bins,
+        strict=True,
+    ):
+        _require_finite_nonnegative("load", load)
+        _require_unit_interval("total_mineral_fraction", mineral)
+        if bin_index is None:
+            continue
+        weighted_load += bin_totals[bin_index] * compute_combustible_load(load, mineral)
+    return weighted_load
+
+
 def compute_mineral_damping(effective_mineral_fraction: float) -> float:
     """Return the dimensionless mineral damping coefficient ``eta_S``."""
 
@@ -85,12 +150,8 @@ def compute_live_moisture_of_extinction(
     """Return Albini-adjusted live-fuel moisture of extinction.
 
     Fine dead loading uses ``w * exp(-138 / sigma)`` while fine live loading
-    uses ``w * exp(-500 / sigma)``, with SAV expressed in inverse feet in the
-    empirical exponentials. Load units cancel in the dead/live ratio, so the
-    inputs may remain in PyFireCA's SI load units.
-
-    The final live extinction moisture is bounded below by the dead-fuel
-    extinction moisture, matching the operational Albini-adjusted path.
+    uses ``w * exp(-500 / sigma)``, with SAV expressed in inverse feet. Load
+    units cancel in the dead/live ratio.
     """
 
     _require_equal_lengths("dead fuel", dead_loads, dead_sav_m_inv, dead_moisture_fractions)
@@ -104,30 +165,30 @@ def compute_live_moisture_of_extinction(
 
     fine_dead = 0.0
     weighted_dead_moisture = 0.0
-    for load, sav_m_inv, moisture in zip(
+    for load, sav, moisture in zip(
         dead_loads,
         dead_sav_m_inv,
         dead_moisture_fractions,
         strict=True,
     ):
         _require_finite_nonnegative("dead_load", load)
-        _require_finite_nonnegative("dead_sav_m_inv", sav_m_inv)
+        _require_finite_nonnegative("dead_sav_m_inv", sav)
         _require_finite_nonnegative("dead_moisture_fraction", moisture)
-        if sav_m_inv == 0.0:
+        if sav == 0.0:
             continue
-        weight = load * exp(-138.0 / m_inv_to_ft_inv(sav_m_inv))
+        weight = load * exp(-138.0 / m_inv_to_ft_inv(sav))
         fine_dead += weight
         weighted_dead_moisture += weight * moisture
 
     fine_dead_moisture = weighted_dead_moisture / fine_dead if fine_dead > 1e-7 else 0.0
 
     fine_live = 0.0
-    for load, sav_m_inv in zip(live_loads, live_sav_m_inv, strict=True):
+    for load, sav in zip(live_loads, live_sav_m_inv, strict=True):
         _require_finite_nonnegative("live_load", load)
-        _require_finite_nonnegative("live_sav_m_inv", sav_m_inv)
-        if sav_m_inv == 0.0:
+        _require_finite_nonnegative("live_sav_m_inv", sav)
+        if sav == 0.0:
             continue
-        fine_live += load * exp(-500.0 / m_inv_to_ft_inv(sav_m_inv))
+        fine_live += load * exp(-500.0 / m_inv_to_ft_inv(sav))
 
     dead_over_live = fine_dead / fine_live if fine_live > 1e-7 else 0.0
     live_mx = (
