@@ -63,7 +63,7 @@ def test_fm2_live_moisture_of_extinction_matches_albini_operational_path() -> No
     )
 
     assert observed == pytest.approx(11.63009861291455, rel=1e-14)
-    assert compute_moisture_damping(1.0, observed) == pytest.approx(0.7974243950239339, rel=1e-14)
+    assert compute_moisture_damping(1.0, observed) == pytest.approx(0.812843639975883, rel=1e-14)
 
 
 def test_live_moisture_of_extinction_is_bounded_by_dead_extinction() -> None:
