@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pyfireca.behavior._rothermel_equations import (
     compute_heat_sink_j_m3,
     compute_live_moisture_of_extinction,
@@ -25,15 +27,29 @@ from pyfireca.behavior.rothermel import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class BaseSpreadResult:
+    """Validated R2 quantities needed by later Rothermel wind/slope stages."""
+
+    spread_rate_m_s: float
+    reaction_intensity_w_m2: float
+    characteristic_sav_m_inv: float
+    packing_ratio: float
+    optimum_packing_ratio: float
+    relative_packing_ratio: float
+    propagating_flux: float
+    heat_sink_j_m3: float
+
+
 def _weighted(values: tuple[float, ...], weights: tuple[float, ...]) -> float:
     return sum(value * weight for value, weight in zip(values, weights, strict=True))
 
 
-def compute_base_spread_rate_m_s(
+def compute_base_spread_result(
     fuel: RothermelFuelModel,
     moisture: RothermelFuelMoisture,
-) -> float:
-    """Return Albini-adjusted no-wind/no-slope surface ROS in m/s.
+) -> BaseSpreadResult:
+    """Return validated static no-wind/no-slope Rothermel quantities.
 
     This assembler deliberately excludes wind, slope, dynamic herbaceous load
     transfer, crown fire, and spotting. It combines the independently tested R1
@@ -45,7 +61,7 @@ def compute_base_spread_rate_m_s(
     if not isinstance(moisture, RothermelFuelMoisture):
         raise TypeError("moisture must be RothermelFuelMoisture")
     if not fuel.burnable:
-        return 0.0
+        return BaseSpreadResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     if fuel.dynamic:
         raise NotImplementedError(
             "dynamic herbaceous load transfer must be applied before base Rothermel calculation"
@@ -56,11 +72,21 @@ def compute_base_spread_rate_m_s(
     packing_ratio = compute_packing_ratio(fuel)
     optimum_packing_ratio = compute_optimum_packing_ratio(characteristic_sav)
     if optimum_packing_ratio <= 0.0:
-        return 0.0
+        return BaseSpreadResult(
+            0.0,
+            0.0,
+            characteristic_sav,
+            packing_ratio,
+            optimum_packing_ratio,
+            0.0,
+            0.0,
+            0.0,
+        )
 
+    relative_packing_ratio = packing_ratio / optimum_packing_ratio
     reaction_velocity = compute_reaction_velocity_per_min(
         characteristic_sav,
-        packing_ratio / optimum_packing_ratio,
+        relative_packing_ratio,
     )
     moisture_values = moisture.as_six_class_values()
 
@@ -134,6 +160,7 @@ def compute_base_spread_rate_m_s(
             compute_mineral_damping(live_effective_mineral),
         )
 
+    reaction_intensity = dead_reaction + live_reaction
     weighted_preignition_heat = 0.0
     for index in range(4):
         weighted_preignition_heat += (
@@ -159,9 +186,28 @@ def compute_base_spread_rate_m_s(
         weighted_preignition_heat,
     )
     propagating_flux = compute_propagating_flux(characteristic_sav, packing_ratio)
-
-    return compute_no_wind_no_slope_spread_rate_m_s(
-        dead_reaction + live_reaction,
+    spread_rate = compute_no_wind_no_slope_spread_rate_m_s(
+        reaction_intensity,
         propagating_flux,
         heat_sink,
     )
+
+    return BaseSpreadResult(
+        spread_rate_m_s=spread_rate,
+        reaction_intensity_w_m2=reaction_intensity,
+        characteristic_sav_m_inv=characteristic_sav,
+        packing_ratio=packing_ratio,
+        optimum_packing_ratio=optimum_packing_ratio,
+        relative_packing_ratio=relative_packing_ratio,
+        propagating_flux=propagating_flux,
+        heat_sink_j_m3=heat_sink,
+    )
+
+
+def compute_base_spread_rate_m_s(
+    fuel: RothermelFuelModel,
+    moisture: RothermelFuelMoisture,
+) -> float:
+    """Return Albini-adjusted no-wind/no-slope surface ROS in m/s."""
+
+    return compute_base_spread_result(fuel, moisture).spread_rate_m_s
