@@ -22,9 +22,10 @@ STANDARD_DENSITY = tuple(lb_ft3_to_kg_m3(32.0) for _ in range(6))
 STANDARD_TOTAL_MINERAL = (0.0555,) * 6
 STANDARD_EFFECTIVE_MINERAL = (0.01,) * 6
 SLOPE_30_PERCENT_DEG = degrees(atan(0.3))
+TON_ACRE_TO_LB_FT2 = 2000.0 / 43560.0
 
 
-def _fm1(*, dynamic: bool = False) -> RothermelFuelModel:
+def _fm1() -> RothermelFuelModel:
     return RothermelFuelModel(
         code=1,
         depth_m=feet_to_metres(1.0),
@@ -42,7 +43,35 @@ def _fm1(*, dynamic: bool = False) -> RothermelFuelModel:
         particle_density_kg_m3=STANDARD_DENSITY,
         total_mineral_fraction=STANDARD_TOTAL_MINERAL,
         effective_mineral_fraction=STANDARD_EFFECTIVE_MINERAL,
-        dynamic=dynamic,
+    )
+
+
+def _gr1() -> RothermelFuelModel:
+    return RothermelFuelModel(
+        code=101,
+        depth_m=feet_to_metres(0.4),
+        dead_moisture_of_extinction_fraction=0.15,
+        loads_kg_m2=(
+            lb_ft2_to_kg_m2(0.10 * TON_ACRE_TO_LB_FT2),
+            0.0,
+            0.0,
+            0.0,
+            lb_ft2_to_kg_m2(0.30 * TON_ACRE_TO_LB_FT2),
+            0.0,
+        ),
+        sav_ratio_m_inv=(
+            ft_inv_to_m_inv(2200.0),
+            ft_inv_to_m_inv(109.0),
+            ft_inv_to_m_inv(30.0),
+            0.0,
+            ft_inv_to_m_inv(2000.0),
+            ft_inv_to_m_inv(1500.0),
+        ),
+        heat_content_j_kg=STANDARD_HEAT,
+        particle_density_kg_m3=STANDARD_DENSITY,
+        total_mineral_fraction=STANDARD_TOTAL_MINERAL,
+        effective_mineral_fraction=STANDARD_EFFECTIVE_MINERAL,
+        dynamic=True,
     )
 
 
@@ -62,10 +91,9 @@ def _inputs(
     wind_from_deg: float = 0.0,
     slope_deg: float = 0.0,
     aspect_deg: float = 180.0,
-    dynamic: bool = False,
 ) -> RothermelInputs:
     return RothermelInputs(
-        fuel=_fm1(dynamic=dynamic),
+        fuel=_fm1(),
         moisture=_moisture(),
         midflame_wind_speed_m_s=ft_min_to_m_s(wind_ft_min),
         wind_from_direction_deg=wind_from_deg,
@@ -137,9 +165,34 @@ def test_optional_wind_limit_caps_high_effective_wind_without_changing_direction
     assert unlimited.diagnostics["wind_limit_enabled"] == 0.0
 
 
-def test_dynamic_fuel_still_requires_explicit_curing_before_public_compute() -> None:
-    with pytest.raises(NotImplementedError, match="dynamic herbaceous"):
-        RothermelModel().compute(_inputs(dynamic=True))
+def test_dynamic_gr1_matches_pinned_behave_reference_after_curing_transfer() -> None:
+    moisture = RothermelFuelMoisture(
+        dead_1h_fraction=0.05,
+        dead_10h_fraction=0.05,
+        dead_100h_fraction=0.05,
+        live_herbaceous_fraction=0.60,
+        live_woody_fraction=0.90,
+    )
+    inputs = RothermelInputs(
+        fuel=_gr1(),
+        moisture=moisture,
+        midflame_wind_speed_m_s=0.0,
+        wind_from_direction_deg=0.0,
+        slope_deg=0.0,
+        aspect_deg=0.0,
+    )
+
+    result = RothermelModel().compute(inputs)
+
+    assert result.spread_rate_m_s == pytest.approx(0.003990911424818205, rel=1e-12)
+    assert result.spread_direction_deg is None
+    assert result.diagnostics["dynamic_herbaceous_transfer_fraction"] == pytest.approx(0.667)
+    expected_transferred_load = (
+        lb_ft2_to_kg_m2(0.30 * TON_ACRE_TO_LB_FT2) * 0.667
+    )
+    assert result.diagnostics[
+        "dynamic_herbaceous_transferred_load_kg_m2"
+    ] == pytest.approx(expected_transferred_load)
 
 
 def test_model_option_and_input_types_are_checked() -> None:
