@@ -16,7 +16,13 @@ from pyfireca.behavior.rothermel_landscape import build_static_raster_rothermel_
 from pyfireca.config import StaticRasterInputPaths, StaticRunConfig, load_static_run_config
 from pyfireca.data import LandscapeInput
 from pyfireca.edge_coupling import HalfCellInterfaceDirectionalSpreadRate
+from pyfireca.fbp_config import (
+    StaticFBPRasterInputPaths,
+    StaticFBPRunConfig,
+    load_static_fbp_run_config,
+)
 from pyfireca.fbp_simulator import StaticFBPSimulationRequest, run_static_fbp_simulation
+from pyfireca.fbp_workflow import run_static_fbp_config, validate_static_fbp_run
 from pyfireca.grid import RasterGrid
 from pyfireca.ignition import IgnitionEvent, build_ignition_times
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
@@ -27,6 +33,7 @@ from pyfireca.outputs import (
     write_static_simulation_outputs,
 )
 from pyfireca.rules import NeighborIgnitionRule
+from pyfireca.run_config import load_run_config, run_config, validate_run_config
 from pyfireca.simulation import Simulation
 from pyfireca.simulator import (
     StaticWildfireSimulationRequest,
@@ -55,6 +62,8 @@ __all__ = [
     "RasterGrid",
     "Simulation",
     "StaticArrivalTimeSolver",
+    "StaticFBPRasterInputPaths",
+    "StaticFBPRunConfig",
     "StaticFBPSimulationRequest",
     "StaticRasterFBPInputsProvider",
     "StaticRasterInputPaths",
@@ -69,11 +78,17 @@ __all__ = [
     "build_ignition_times",
     "build_static_raster_fbp_arrival_solver",
     "build_static_raster_rothermel_arrival_solver",
+    "load_run_config",
+    "load_static_fbp_run_config",
     "load_static_run_config",
+    "run_config",
     "run_static_config",
+    "run_static_fbp_config",
     "run_static_fbp_simulation",
     "run_static_wildfire_simulation",
     "terminal_state_from_result",
+    "validate_run_config",
+    "validate_static_fbp_run",
     "validate_static_run",
     "write_burned_perimeter_geojson",
     "write_static_simulation_outputs",

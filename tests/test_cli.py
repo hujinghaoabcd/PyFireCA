@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from pyfireca import cli
 
 
-def test_validate_command_calls_file_validation(monkeypatch, capsys) -> None:
+def test_validate_command_calls_model_aware_validation(monkeypatch, capsys) -> None:
     marker = object()
     calls = []
-    monkeypatch.setattr(cli, "load_static_run_config", lambda path: marker)
-    monkeypatch.setattr(cli, "validate_static_run", lambda config: calls.append(config))
+    monkeypatch.setattr(cli, "load_run_config", lambda path: marker)
+    monkeypatch.setattr(cli, "validate_run_config", lambda config: calls.append(config))
 
     status = cli.main(["validate", "example.yml"])
 
@@ -26,8 +26,8 @@ def test_run_command_reports_output_and_summary(monkeypatch, capsys, tmp_path) -
         }
     )
     artifacts = SimpleNamespace(directory=tmp_path / "run")
-    monkeypatch.setattr(cli, "load_static_run_config", lambda path: marker)
-    monkeypatch.setattr(cli, "run_static_config", lambda config: (result, artifacts))
+    monkeypatch.setattr(cli, "load_run_config", lambda path: marker)
+    monkeypatch.setattr(cli, "run_config", lambda config: (result, artifacts))
 
     status = cli.main(["run", "example.yml"])
 
@@ -43,7 +43,7 @@ def test_cli_converts_runtime_failure_to_nonzero_status(monkeypatch, capsys) -> 
     def fail(path):
         raise ValueError("bad config")
 
-    monkeypatch.setattr(cli, "load_static_run_config", fail)
+    monkeypatch.setattr(cli, "load_run_config", fail)
 
     status = cli.main(["validate", "broken.yml"])
 

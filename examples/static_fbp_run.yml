@@ -1,0 +1,31 @@
+version: 1
+
+behavior:
+  model: fbp
+  julian_day: 180
+  percent_conifer: 50
+  percent_dead_fir: 35
+  grass_fuel_load_kg_m2: 0.35
+  grass_curing_percent: 80
+
+cell_size_m: 30.0
+
+inputs:
+  fbp_fuel_type: data/fbp_fuel_type.tif
+  ffmc: data/ffmc.tif
+  bui: data/bui.tif
+  wind_speed_10m: data/wind_speed_10m.tif
+  wind_from_direction: data/wind_from_direction.tif
+  slope_percent: data/slope_percent.tif
+  aspect: data/aspect.tif
+  latitude: data/latitude.tif
+  longitude: data/longitude.tif
+  elevation: data/elevation.tif
+
+ignitions:
+  - row: 100
+    col: 100
+    time_s: 0.0
+
+output:
+  directory: runs/fbp-example

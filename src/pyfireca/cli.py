@@ -1,4 +1,4 @@
-"""Command-line interface for the baseline PyFireCA static simulator."""
+"""Command-line interface for static PyFireCA wildfire simulations."""
 
 from __future__ import annotations
 
@@ -7,14 +7,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from pyfireca.config import load_static_run_config
-from pyfireca.workflow import run_static_config, validate_static_run
+from pyfireca.run_config import load_run_config, run_config, validate_run_config
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pyfireca",
-        description="Run the validated static PyFireCA wildfire simulator.",
+        description="Run validated static PyFireCA wildfire simulations.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -33,15 +32,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _run_validate(config_path: Path) -> int:
-    config = load_static_run_config(config_path)
-    validate_static_run(config)
+    config = load_run_config(config_path)
+    validate_run_config(config)
     print(f"Valid PyFireCA configuration: {config_path.resolve()}")
     return 0
 
 
 def _run_simulation(config_path: Path) -> int:
-    config = load_static_run_config(config_path)
-    result, artifacts = run_static_config(config)
+    config = load_run_config(config_path)
+    result, artifacts = run_config(config)
     metrics = result.summary_metrics()
     print(f"PyFireCA run complete: {artifacts.directory}")
     print(f"Burned cells: {metrics['burned_cell_count']}")
