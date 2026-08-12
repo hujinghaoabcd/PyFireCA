@@ -158,7 +158,9 @@ class StaticRasterFBPInputsProvider:
 
         fuel_units = self.environment.layer(self.names.fuel_type).units
         if fuel_units not in (None, "code"):
-            raise ValueError(f"FBP fuel-type layer must use units=None or 'code'; got {fuel_units!r}")
+            raise ValueError(
+                f"FBP fuel-type layer must use units=None or 'code'; got {fuel_units!r}"
+            )
 
     @staticmethod
     def _validate_fuel_codes(
@@ -169,7 +171,8 @@ class StaticRasterFBPInputsProvider:
             value = float(raw)
             if not isfinite(value) or not value.is_integer():
                 raise ValueError(
-                    f"FBP fuel-type codes inside the simulation domain must be integers; got {raw!r}"
+                    "FBP fuel-type codes inside the simulation domain must be "
+                    f"integers; got {raw!r}"
                 )
             code = int(value)
             if code not in _FBP_NUMERIC_FUEL_CODES:
