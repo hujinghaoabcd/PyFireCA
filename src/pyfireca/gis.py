@@ -49,8 +49,7 @@ class RasterMetadata:
 
     def __post_init__(self) -> None:
         if len(self.shape) != 2 or any(
-            isinstance(size, bool) or not isinstance(size, int) or size < 1
-            for size in self.shape
+            isinstance(size, bool) or not isinstance(size, int) or size < 1 for size in self.shape
         ):
             raise ValueError("shape must contain two positive integer dimensions")
 
