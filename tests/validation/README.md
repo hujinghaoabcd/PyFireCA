@@ -11,6 +11,39 @@ Grade C  independent software comparison
 Grade D  internal synthetic/analytical fixture
 ```
 
+## Albini 1976 worked examples
+
+File:
+
+```text
+data/albini1976_worked_examples.csv
+```
+
+Evidence grade: **A — primary/authoritative worked value**.
+
+Source:
+
+```text
+Frank A. Albini (1976)
+Estimating Wildfire Behavior and Effects
+USDA Forest Service General Technical Report INT-30
+Examples section, printed pages 10 and 16
+```
+
+The source gives two worked nomograph examples:
+
+1. fuel model 3, fuel moisture 5%, 20-ft wind 8 mi/h, level ground → spread rate `97 chains/hour`, flame length `12.5 ft`;
+2. fuel model 2, fine dead moisture 8%, live foliage moisture about 50%, calm wind, slope 70% → spread rate `34 chains/hour`, flame length `6.2 ft`.
+
+These are valuable full-surface-fire validation cases, but neither is the dedicated R2 no-wind/no-slope fixture:
+
+```text
+Example 1: slope = 0, wind > 0
+Example 2: wind = 0, slope > 0
+```
+
+They should therefore be used after wind/slope integration (R3/R4), not as a substitute for the R2 base-ROS reference.
+
 ## Behave 7 surface reference
 
 File:
@@ -44,4 +77,10 @@ The snapshot is copied verbatim from the pinned upstream CSV so future changes t
 
 The current Behave upstream surface CSV contains nonzero wind/slope cases plus a nonburnable fuel-model case. It is useful for later whole-surface R3/R4 validation, but it is **not** the dedicated zero-wind/zero-slope R2 reference fixture.
 
-PyFireCA must continue searching for a suitable Grade A worked value, or explicitly document the absence of one, before treating R2 no-wind/no-slope ROS as fully validated.
+## Current R2 reference gap
+
+The source audit has found strong Grade A/B references for whole-model behavior, but not yet a precise tabulated zero-wind **and** zero-slope worked value that matches the selected Albini-adjusted R2 formulation.
+
+Rothermel 1972 contains no-wind equations and graphical results, including curves spanning zero wind, but graph reading is not precise enough to serve as a high-accuracy regression constant. Albini's worked examples isolate either level ground or calm wind, not both simultaneously.
+
+PyFireCA therefore records the R2 numerical fixture as an explicit validation gap rather than manufacturing a value. The next R2 work should either locate a suitable Grade A value or construct a pinned Grade B zero-wind/zero-slope case using the official Behave implementation while clearly retaining its Grade B status.
