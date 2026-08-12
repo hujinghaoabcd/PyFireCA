@@ -1,0 +1,57 @@
+name: Behave 7 R2 reference probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/behave7-r2-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  zero-wind-zero-slope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pinned Behave 7 app
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave-app
+          ref: a3cfcd5903188d73445948af16644868225bb9d5
+          path: behave-app
+          submodules: false
+          persist-credentials: false
+
+      - name: Check out pinned Behave core submodule
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave
+          ref: 29888c7ad364aa18cfb340f4c25a8e395f24260f
+          path: behave-app/behave-lib/behave-mirror
+          persist-credentials: false
+
+      - name: Build official testSurface executable
+        run: |
+          cmake \
+            -S behave-app/behave-lib \
+            -B behave-build \
+            -DTEST_BEHAVE=ON \
+            -DBEHAVE_WASM=OFF \
+            -DBEHAVE_JS=OFF \
+            -DBEHAVE_HTML=OFF
+          cmake --build behave-build --target testSurface --parallel 2
+
+      - name: Run zero-wind zero-slope reference case
+        shell: bash
+        run: |
+          cat > zero_wind_zero_slope.csv <<'CSV'
+          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
+          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,-1.0
+          CSV
+
+          echo "Pinned Behave app commit: a3cfcd5903188d73445948af16644868225bb9d5"
+          echo "Pinned behave core commit: 29888c7ad364aa18cfb340f4c25a8e395f24260f"
+          echo "Probe case: fuel model 1; 5/5/5% dead moisture; 100/100% live moisture; direct-midflame wind 0 ft/min; slope 0%; aspect 0; no canopy."
+          ./behave-build/testSurface zero_wind_zero_slope.csv | tee behave7_r2_probe.log
+          echo "--- Parsed official result line ---"
+          grep -E "observed value|Test fire spread rate|failed|passed" behave7_r2_probe.log || true
