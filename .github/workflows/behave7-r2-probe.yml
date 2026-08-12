@@ -30,35 +30,21 @@ jobs:
           path: behave-app/behave-lib/behave-mirror
           persist-credentials: false
 
-      - name: Patch test harness for precision and one explicit wind-limit case
+      - name: Increase upstream test output precision only
         run: |
           python - <<'PY'
           from pathlib import Path
 
           path = Path("behave-app/behave-lib/test/cpp/testSurface.cpp")
           source = path.read_text()
-
-          main_needle = "int main(int argc, char * argv[])\n{\n"
-          main_replacement = main_needle + "  std::cout << std::setprecision(17);\n"
-          if main_needle not in source:
+          needle = "int main(int argc, char * argv[])\n{\n"
+          replacement = needle + "  std::cout << std::setprecision(17);\n"
+          if needle not in source:
               raise SystemExit("Could not locate testSurface main() for precision-only patch")
-          source = source.replace(main_needle, main_replacement, 1)
-
-          run_call = "  behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();"
-          if source.count(run_call) != 1:
-              raise SystemExit(f"Expected exactly one testSurface run call; found {source.count(run_call)}")
-          injected = (
-              "  behaveRun.surface.setIsWindLimitEnabled(inputs.windSpeed == 1000.0);\n"
-              + run_call
-          )
-          source = source.replace(run_call, injected, 1)
-          path.write_text(source)
+          path.write_text(source.replace(needle, replacement, 1))
           PY
 
-          echo "--- Patched testSurfaceModule excerpt ---"
-          nl -ba behave-app/behave-lib/test/cpp/testSurface.cpp | sed -n '235,285p'
-
-      - name: Build official testSurface executable
+      - name: Build pinned Behave library and official testSurface
         run: |
           cmake \
             -S behave-app/behave-lib \
@@ -67,7 +53,7 @@ jobs:
             -DBEHAVE_WASM=OFF \
             -DBEHAVE_JS=OFF \
             -DBEHAVE_HTML=OFF
-          cmake --build behave-build --target testSurface --parallel 2
+          cmake --build behave-build --target behave testSurface --parallel 2
 
       - name: Verify pinned FM1 dead-only base reference
         shell: bash
@@ -79,7 +65,7 @@ jobs:
 
           echo "Pinned Behave app commit: a3cfcd5903188d73445948af16644868225bb9d5"
           echo "Pinned behave core commit: 29888c7ad364aa18cfb340f4c25a8e395f24260f"
-          echo "Harness patch changes output precision and enables wind limit only for 1000 ft/min row."
+          echo "Official testSurface source is changed only to print additional precision."
           ./behave-build/testSurface fm1_zero_wind_zero_slope.csv | tee behave7_fm1_reference.log
           grep -q "Total tests passed: 1" behave7_fm1_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_reference.log
@@ -120,15 +106,76 @@ jobs:
           grep -q "Total tests passed: 1" behave7_fm1_wind_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_wind_reference.log
 
-      - name: Verify pinned FM1 explicit wind-limit reference
+      - name: Build explicit wind-limit probe against pinned libbehave
         shell: bash
         run: |
-          cat > fm1_wind_limit.csv <<'CSV'
-          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
-          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",1000,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,297.3264790473483
-          CSV
+          cat > behave_wind_limit_probe.cpp <<'CPP'
+          #include <iomanip>
+          #include <iostream>
+          #include "behaveRun.h"
+          #include "fuelModels.h"
+          #include "species_master_table.h"
 
-          echo "FM1 wind-limit reference: 1000 ft/min direct-midflame wind; optional wind limit explicitly enabled by test harness."
-          ./behave-build/testSurface fm1_wind_limit.csv | tee behave7_fm1_wind_limit_reference.log
-          grep -q "Total tests passed: 1" behave7_fm1_wind_limit_reference.log
-          grep -q "Total tests failed: 0" behave7_fm1_wind_limit_reference.log
+          int main()
+          {
+              FuelModels fuelModels;
+              SpeciesMasterTable mortalitySpeciesTable;
+              BehaveRun behaveRun(fuelModels, mortalitySpeciesTable);
+
+              behaveRun.surface.updateSurfaceInputs(
+                  1,
+                  5.0,
+                  5.0,
+                  5.0,
+                  100.0,
+                  100.0,
+                  FractionUnits::Percent,
+                  1000.0,
+                  SpeedUnits::FeetPerMinute,
+                  WindHeightInputMode::DirectMidflame,
+                  0.0,
+                  WindAndSpreadOrientationMode::RelativeToUpslope,
+                  0.0,
+                  SlopeUnits::Percent,
+                  0.0,
+                  0.0,
+                  FractionUnits::Percent,
+                  0.0,
+                  LengthUnits::Feet,
+                  0.0,
+                  FractionUnits::Fraction);
+
+              behaveRun.surface.setIsWindLimitEnabled(true);
+              behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();
+
+              std::cout << std::setprecision(17)
+                        << behaveRun.surface.getSpreadRate(SpeedUnits::ChainsPerHour)
+                        << "\n";
+              return 0;
+          }
+          CPP
+
+          clang++ -std=c++14 \
+            -Ibehave-app/behave-lib/behave-mirror/src/behave \
+            behave_wind_limit_probe.cpp \
+            behave-build/libbehave.a \
+            -pthread \
+            -o behave_wind_limit_probe
+
+      - name: Run explicit wind-limit probe
+        shell: bash
+        run: |
+          {
+            echo "behave_app_commit=a3cfcd5903188d73445948af16644868225bb9d5"
+            echo "behave_core_commit=29888c7ad364aa18cfb340f4c25a8e395f24260f"
+            echo "case=FM1 dead moisture 5/5/5%; slope 0%; direct-midflame wind 1000 ft/min; wind limit enabled"
+            printf "spread_rate_chains_h="
+            ./behave_wind_limit_probe
+          } | tee behave_wind_limit_probe.txt
+
+      - name: Upload wind-limit probe result
+        uses: actions/upload-artifact@v4
+        with:
+          name: behave-wind-limit-probe
+          path: behave_wind_limit_probe.txt
+          if-no-files-found: error
