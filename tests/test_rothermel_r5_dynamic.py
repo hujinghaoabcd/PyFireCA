@@ -17,11 +17,11 @@ def _dynamic_fuel(*, dynamic: bool = True, dead_herb_load: float = 0.0) -> Rothe
         depth_m=1.0,
         dead_moisture_of_extinction_fraction=0.15,
         loads_kg_m2=(1.0, 0.0, 0.0, dead_herb_load, 3.0, 0.0),
-        sav_ratio_m_inv=(1000.0, 100.0, 30.0, 0.0, 2000.0, 1500.0),
-        heat_content_j_kg=(10.0, 10.0, 10.0, 0.0, 20.0, 20.0),
-        particle_density_kg_m3=(30.0, 30.0, 30.0, 0.0, 40.0, 40.0),
-        total_mineral_fraction=(0.05, 0.05, 0.05, 0.0, 0.08, 0.08),
-        effective_mineral_fraction=(0.01, 0.01, 0.01, 0.0, 0.02, 0.02),
+        sav_ratio_m_inv=(1000.0, 100.0, 30.0, 999.0, 2000.0, 1500.0),
+        heat_content_j_kg=(10.0, 10.0, 10.0, 11.0, 20.0, 20.0),
+        particle_density_kg_m3=(30.0, 30.0, 30.0, 31.0, 40.0, 40.0),
+        total_mineral_fraction=(0.05, 0.05, 0.05, 0.06, 0.08, 0.08),
+        effective_mineral_fraction=(0.01, 0.01, 0.01, 0.015, 0.02, 0.02),
         dynamic=dynamic,
     )
 
@@ -52,9 +52,7 @@ def test_dynamic_transfer_fraction_matches_pinned_behave_piecewise_rule(
     moisture: float,
     expected: float,
 ) -> None:
-    assert compute_dynamic_herbaceous_transfer_fraction(moisture) == pytest.approx(
-        expected
-    )
+    assert compute_dynamic_herbaceous_transfer_fraction(moisture) == pytest.approx(expected)
 
 
 def test_dynamic_transfer_conserves_herbaceous_load() -> None:
