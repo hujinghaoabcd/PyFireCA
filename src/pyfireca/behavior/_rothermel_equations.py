@@ -192,9 +192,7 @@ def compute_live_moisture_of_extinction(
 
     dead_over_live = fine_dead / fine_live if fine_live > 1e-7 else 0.0
     live_mx = (
-        2.9
-        * dead_over_live
-        * (1.0 - fine_dead_moisture / dead_moisture_of_extinction_fraction)
+        2.9 * dead_over_live * (1.0 - fine_dead_moisture / dead_moisture_of_extinction_fraction)
         - 0.226
     )
     return max(dead_moisture_of_extinction_fraction, live_mx)
