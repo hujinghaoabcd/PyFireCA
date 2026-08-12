@@ -65,4 +65,5 @@ jobs:
             tests/test_gis.py \
             tests/test_rasterio_io.py \
             tests/test_output_rasterio.py \
-            tests/test_workflow_rasterio.py
+            tests/test_workflow_rasterio.py \
+            tests/test_cli_rasterio.py
