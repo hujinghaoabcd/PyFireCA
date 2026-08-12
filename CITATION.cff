@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use PyFireCA in academic work, please cite the software."
+title: "PyFireCA: A modular and extensible cellular automata framework for wildfire spread simulation"
+type: software
+authors:
+  - family-names: Hu
+    given-names: Jinghao
+repository-code: "https://github.com/hujinghaoabcd/PyFireCA"
+version: 0.1.0a0
+date-released: 2026-08-12
+keywords:
+  - wildfire
+  - cellular automata
+  - fire spread
+  - GIS
+  - scientific computing
