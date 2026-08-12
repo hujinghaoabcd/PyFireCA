@@ -2,253 +2,277 @@
 
 ## 1. Development objective
 
-The development process must preserve two priorities at the same time:
+PyFireCA must preserve two priorities at the same time:
 
-1. PyFireCA should remain small enough that the CA algorithms are easy to inspect and modify.
-2. PyFireCA should meet modern research-software expectations for reproducibility, validation, documentation, testing, and release discipline.
+1. keep CA algorithms small and inspectable enough for methodological research;
+2. meet modern research-software expectations for reproducibility, validation, documentation, testing, and release discipline.
 
-The project should not accumulate infrastructure faster than scientific requirements justify it.
+Infrastructure must not grow faster than scientific requirements justify it.
 
-## 2. Development documents
+## 2. Living development documents
 
-The following files are living development artifacts:
-
-- `docs/DESIGN.md` — architecture and design decisions;
-- `docs/DEVELOPMENT.md` — development workflow and roadmap;
-- `docs/STATUS.md` — current implementation status;
-- `docs/HANDOFF.md` — detailed continuation guide;
-- `docs/VALIDATION.md` — scientific validation plan;
-- `docs/BEHAVIOR_DATA_CONTRACT.md` — units, behavior/data boundaries, and Milestone C conventions.
+- `docs/DESIGN.md` — architecture and cross-cutting design decisions;
+- `docs/DEVELOPMENT.md` — workflow and milestone roadmap;
+- `docs/STATUS.md` — repository truth at the current commit;
+- `docs/HANDOFF.md` — exact continuation context for the next session;
+- `docs/VALIDATION.md` — scientific/numerical validation plan;
+- `docs/BEHAVIOR_DATA_CONTRACT.md` — shared behavior/data conventions;
+- `docs/ROTHERMEL_REFERENCE.md` — Rothermel implementation and validation plan.
 
 Rules:
 
-- architecture changes update `DESIGN.md` before or with code;
+- architecture/scientific interpretation changes update design documentation before or with code;
 - completed work updates `STATUS.md`;
-- every development session leaves `HANDOFF.md` accurate enough for a new session to continue without reconstructing context;
-- scientific claims require a corresponding validation item.
+- every substantial development session leaves `HANDOFF.md` current;
+- scientific claims require a validation item or explicit limitation.
 
-## 3. Branch and change policy
+## 3. Change workflow
 
-For normal development:
+Preferred normal workflow:
 
 ```text
 main
  └── focused feature/fix branch
-      └── tests + docs
+      └── implementation + tests + affected docs
 ```
 
-Keep commits scoped. Avoid mixing a scientific-model change with unrelated formatting or repository cleanup when possible.
+Current bootstrap work has been committed directly while establishing the repository. Once normal feature development begins, prefer focused branches/PRs for changes with meaningful scientific impact.
 
-Before a feature is considered complete:
+Required local checks:
 
 ```bash
 ruff check .
 ruff format --check .
 pytest
-```
-
-When pre-commit is installed:
-
-```bash
 pre-commit run --all-files
 ```
 
-## 4. Initial milestones
+CI currently repeats quality checks and pytest on Python 3.11, 3.12, and 3.13.
+
+## 4. Milestones
 
 ### Milestone A — repository foundation
 
-Goal: establish the scientific-software skeleton before implementing wildfire equations.
+**Status: complete except reviewed RepoForge migration.**
 
-- [x] repository created;
-- [x] English/Chinese landing README initialized;
-- [x] `pyproject.toml` initialized;
-- [x] detailed design document initialized;
-- [x] state model;
-- [x] raster grid model;
-- [x] neighborhood interface;
-- [x] minimal tests;
-- [x] CI;
-- [x] pre-commit;
-- [x] status/handoff/validation documents;
+- [x] repository / `src/` package layout;
+- [x] English and Chinese README;
+- [x] `pyproject.toml` / Hatchling;
+- [x] Ruff / pre-commit / pytest / coverage;
+- [x] GitHub Actions CI;
+- [x] citation / changelog / contribution files;
+- [x] design / development / validation / status / handoff documents;
 - [ ] RepoForge managed-header migration.
 
-The RepoForge item is intentionally deferred rather than approximated by hand. The current README already contains project-specific scientific prose. When RepoForge is applied, initialize it as `scientific-python / standard`, review the generated diff, and migrate only the stable managed header regions so the hand-written README body remains user-owned.
-
-Recommended reviewed workflow:
-
-```bash
-repoforge init . \
-  --type scientific-python \
-  --profile standard \
-  --name PyFireCA \
-  --repository-url https://github.com/hujinghaoabcd/PyFireCA
-
-repoforge diff . --config repoforge.yml
-repoforge apply . --config repoforge.yml --dry-run
-```
-
-Because the repository already has an unmarked README, do not use `--force` until the migration diff has been reviewed carefully.
+RepoForge remains deferred intentionally. The existing README contains project-specific scientific prose. When migrated, use `scientific-python / standard`, inspect the diff, and prefer managed header sections rather than whole-file ownership.
 
 ### Milestone B — minimal CA reference core
 
-Goal: run a small CA without wildfire-specific fire-behavior equations.
+**Status: complete.**
 
-- [x] `FireState` enum and state validation;
-- [x] `RasterGrid` shape/state contract;
+- [x] `FireState` and state validation;
+- [x] `RasterGrid`;
 - [x] Moore neighborhood;
 - [x] Von Neumann neighborhood;
-- [x] boundary-safe neighbor indexing;
-- [x] abstract/minimal transition-rule contract;
-- [x] synchronous simulation step;
+- [x] clipped boundary-safe neighbor indexing;
+- [x] synchronous `TransitionRule`;
+- [x] `Simulation.step()` / `run()`;
 - [x] explicit `numpy.random.Generator`;
-- [x] deterministic regression/reference fixtures;
-- [x] minimal runnable example.
+- [x] deterministic `NeighborIgnitionRule` baseline;
+- [x] regression test for synchronous no-cascade semantics;
+- [x] runnable minimal example.
 
-Exit criterion: **met for the architectural reference core.** A small raster CA executes reproducibly, neighborhood substitution is tested, and synchronous no-cascade semantics are explicit. This milestone does not claim physically realistic wildfire behavior.
+Exit criterion is met for the architectural reference core. This milestone does not claim physically realistic wildfire behavior.
 
-### Milestone C — wildfire data and behavior boundary
+### Milestone C — behavior and environmental data contracts
 
-**Current implementation target.** Establish common data and behavior contracts before adding complete spread equations.
+**Status: current; core contract largely complete.**
 
-- [x] define SI-unit policy and document source-model conversion boundaries;
-- [x] common `FireBehaviorResult` type;
-- [x] generic `FireBehaviorModel` protocol;
-- [x] minimal environmental input contract;
-- [x] static `(Y, X)` spatial layers;
-- [x] dynamic `(T, Y, X)` environmental layers;
-- [x] common spatial/time alignment checks for in-memory layers;
-- [ ] initial fuel representation;
-- [x] unit tests for behavior/data contracts;
-- [ ] GIS CRS/transform alignment validation;
-- [ ] optional Rasterio I/O;
-- [ ] model-specific behavior input contract for the first validated fire-behavior implementation.
+Common boundary:
 
-The common behavior interface is now established before Rothermel/FBP implementation. `Simulation` therefore does not need model-name branches, and behavior models are free to use different strongly typed input dataclasses while returning the same CA-facing result.
+- [x] SI-derived CA-facing behavior output policy;
+- [x] `FireBehaviorResult`;
+- [x] generic `FireBehaviorModel[InputT]`;
+- [x] direction convention;
+- [x] static `(Y, X)` `SpatialLayer`;
+- [x] dynamic `(T, Y, X)` `SpatialLayer`;
+- [x] `EnvironmentalData` spatial/time alignment;
+- [x] explicit units/NoData metadata policy;
+- [x] tests for behavior/data contracts.
 
-See [`BEHAVIOR_DATA_CONTRACT.md`](BEHAVIOR_DATA_CONTRACT.md) for the exact current contract.
+First behavior-family contract:
 
-### Milestone D — first behavior-informed wildfire CA rule
+- [x] select Rothermel as first reference implementation;
+- [x] fixed six-class fuel ordering;
+- [x] SI `RothermelFuelModel`;
+- [x] `RothermelFuelMoisture`;
+- [x] `RothermelInputs`;
+- [x] midflame-wind and direction conventions;
+- [x] contract tests;
+- [x] detailed `ROTHERMEL_REFERENCE.md` plan.
 
-Goal: implement one transparent spread rule that consumes the common fire-behavior output.
+Remaining contract/GIS work:
 
-- [ ] ignition representation beyond the architectural baseline;
-- [ ] active burning cells / propagation state;
-- [ ] CA rule consuming behavior output;
-- [ ] arrival-time output;
-- [ ] short integration example;
-- [ ] regression case;
+- [ ] CRS / affine-transform / extent alignment contract;
+- [ ] optional Rasterio read/write adapter;
+- [ ] explicit GIS NoData → unburnable/masked policy;
+- [ ] physical timestamp / interpolation policy when a real weather integration begins.
+
+The generic behavior result contract should not be redesigned merely to make one equation implementation convenient.
+
+### Milestone D — validated Rothermel reference implementation
+
+**Next scientific milestone.**
+
+Implement in small independently testable stages:
+
+#### R1 — units and base fuel quantities
+
+- [ ] exact/native unit-conversion helpers needed by the published equation path;
+- [ ] conversion tests;
+- [ ] surface-area weighting / characteristic fuel quantities;
+- [ ] bulk density / packing ratio / optimum packing ratio;
+- [ ] formula-level tests.
+
+#### R2 — no-wind / no-slope surface ROS
+
+- [ ] moisture damping;
+- [ ] mineral damping;
+- [ ] reaction velocity/intensity;
+- [ ] propagating flux ratio;
+- [ ] effective heating / heat of preignition;
+- [ ] base ROS;
+- [ ] authoritative numeric fixture.
+
+#### R3 — wind and slope
+
+- [ ] wind factor;
+- [ ] slope factor;
+- [ ] explicit geographic/vector convention tests;
+- [ ] documented wind-limit policy if/when applied.
+
+#### R4 — PyFireCA output
+
+- [ ] `RothermelModel.compute(RothermelInputs)`;
+- [ ] SI `FireBehaviorResult`;
+- [ ] independent comparison with authoritative values;
+- [ ] comparison with SimFire/Pyretechnics where scientifically equivalent.
+
+#### R5 — fuel catalogues
+
+- [ ] independently verified Anderson 13 data;
+- [ ] Scott--Burgan 40 only after conversion/provenance tests;
+- [ ] dynamic herbaceous curing when scientifically validated.
+
+Do not copy equations/source code from reference software. Implement from published scientific sources and use software implementations only for comparison.
+
+### Milestone E — first behavior-informed CA rule
+
+- [ ] define the minimal CA propagation state beyond the architectural baseline;
+- [ ] consume `FireBehaviorResult` without behavior-model name branches;
+- [ ] arrival-time representation;
+- [ ] transparent short integration example;
+- [ ] deterministic/reference regression case;
 - [ ] scientific validation case.
 
-The existing `NeighborIgnitionRule` is an architectural baseline, not the scientific rule targeted by this milestone.
+This rule should be intentionally simple enough to diagnose CA effects separately from fire-behavior effects.
 
-### Milestone E — Cell2Fire-like distance rule
+### Milestone F — FBP and Cell2Fire-like CA
 
-Goal: reproduce the important CA propagation concept in a modular form.
+- [ ] define typed FBP input/result adapter to the common behavior contract;
+- [ ] validate FBP reference calculations;
+- [ ] formalize Cell2Fire-like distance accumulation;
+- [ ] define directional neighbor distances/geometry;
+- [ ] connect FBP output to the distance rule;
+- [ ] controlled comparison with Cell2Fire scenarios;
+- [ ] grid/time-step sensitivity;
+- [ ] lattice/directional-bias diagnostics;
+- [ ] document differences instead of claiming exact equivalence prematurely.
 
-- [ ] formalize distance accumulation semantics;
-- [ ] decide neighborhood geometry and directional distances;
-- [ ] connect FBP-style behavior interface;
-- [ ] compare with controlled Cell2Fire scenarios;
-- [ ] characterize time-step / grid effects;
-- [ ] document differences rather than claiming exact equivalence prematurely.
+### Milestone G — richer wildfire processes and experiments
 
-### Milestone F — Rothermel / FBP and richer wildfire processes
-
-The exact order of Rothermel and FBP implementation should follow the validation/reference material available when Milestone C is complete.
-
-- [ ] validated surface-fire behavior implementation;
-- [ ] second interchangeable fire-behavior implementation;
-- [ ] moisture inputs;
-- [ ] optional crown-fire extension after surface validation;
-- [ ] spotting design after core spread is stable;
-- [ ] suppression/firebreak design after propagation invariants are stable.
-
-### Milestone G — Monte Carlo and experiment layer
-
-- [ ] explicit independent RNG stream strategy;
+- [ ] Monte Carlo RNG stream strategy;
 - [ ] scenario/run configuration;
-- [ ] batch/ensemble execution without coupling to the CA kernel;
-- [ ] metrics aggregation;
+- [ ] batch/ensemble execution outside the CA kernel;
 - [ ] reproducibility metadata;
-- [ ] controlled sensitivity experiments.
+- [ ] metrics aggregation;
+- [ ] moisture extensions;
+- [ ] crown fire only after surface behavior validation;
+- [ ] spotting only after core spread invariants are stable;
+- [ ] suppression/firebreaks only after propagation semantics are stable.
 
 ### Milestone H — performance
 
-Only after profiling representative simulations:
+Only after representative profiling:
 
-- [ ] benchmark representative grid sizes and active-cell fractions;
-- [ ] identify Python/NumPy hotspots;
-- [ ] introduce Numba selectively;
+- [ ] benchmark grid sizes / active-cell fractions;
+- [ ] identify measured hotspots;
+- [ ] add Numba selectively;
+- [ ] retain NumPy reference path;
 - [ ] verify optimized/reference equivalence;
-- [ ] record performance methodology and hardware metadata.
+- [ ] record hardware/software benchmark metadata.
 
-## 5. Code-style rules
+## 5. Code rules
 
-### Keep numerical kernels simple
+### Keep numerical kernels explicit
 
-Prefer functions that operate on arrays and explicit parameters. Avoid hiding numerical behavior behind deep object graphs.
+Prefer small pure functions over deep mutable object graphs. Array shape and units belong in typed interfaces/docstrings.
 
 ### Avoid magic values
 
-Use enums/constants/dataclasses for state codes and structured parameters.
+Use enums/dataclasses/constants for state codes and scientific parameters.
 
 ### Avoid global state
 
-No global RNG, mutable singleton configuration, or hidden process-wide simulation state.
+No global RNG, mutable singleton configuration, or hidden simulation state.
 
-### Avoid file I/O inside algorithms
+### Keep file I/O outside algorithms
 
-Numerical kernels receive arrays or domain objects. GIS paths are resolved before entering the kernel.
+Numerical kernels receive arrays/domain objects. GIS paths are resolved by adapters/preprocessing code.
 
 ### Fail explicitly
 
-Invalid grids, impossible states, incompatible shapes, and unsupported configurations should raise informative exceptions.
-
-### Type public interfaces
-
-Public functions/classes must use type hints. Array shape/unit expectations belong in docstrings.
+Invalid states, shapes, physical domains, units/conventions, and unsupported configurations should raise informative exceptions rather than silently clamp/repair unless the scientific model explicitly specifies a limit.
 
 ## 6. Dependency policy
 
-Core dependencies should remain minimal.
-
-Initial core:
+Core dependency remains deliberately small:
 
 ```text
 numpy
 ```
 
-Optional groups may include:
+Optional groups may provide:
 
 ```text
 gis: rasterio
 dev: pytest, pytest-cov, ruff, pre-commit
 ```
 
-Do not add a dependency because a reference project uses it. Every dependency must solve a concrete PyFireCA requirement.
-
-Prefer optional dependencies for GIS/documentation/benchmark tooling when the CA core does not require them at import time.
+Do not add xarray, Zarr, Pydantic, Numba, or another package until a concrete requirement exists.
 
 ## 7. Scientific implementation workflow
 
-For each scientific component:
+For every scientific component:
 
 ```text
-1. identify source/reference equations
-2. document assumptions and units
-3. define input/output contract
-4. implement a readable reference version
-5. add unit/reference tests
-6. add integration test
-7. compare with independent/reference implementation where possible
-8. only then optimize
+1. identify primary source equations
+2. document assumptions / units / conventions
+3. define input and output contracts
+4. prepare reference fixtures where possible
+5. implement readable reference functions
+6. add formula-level tests
+7. add complete reference calculation
+8. compare with an independent implementation
+9. diagnose disagreements
+10. only then optimize/integrate
 ```
 
-A fast implementation without an independently checkable reference path is not considered complete.
+A fast implementation without an independently checkable reference path is incomplete.
 
 ## 8. CA research workflow
 
-When adding a new CA idea, isolate which dimension changes:
+When adding a CA innovation, state exactly what changes:
 
 ```text
 State?
@@ -258,37 +282,30 @@ Scheduler/time stepping?
 Environmental coupling?
 ```
 
-Do not label a whole model as new when the actual methodological change can be represented as one component. This keeps ablation and comparison experiments clean.
-
-A research comparison should preferably reuse the same grid, input data, behavior model, metrics, and experiment runner while replacing only the CA component under study.
+Comparisons should reuse the same grid/data/fire-behavior/metrics/experiment setup wherever possible and replace only the CA component being studied. This makes ablation and methodological attribution much cleaner.
 
 ## 9. Documentation policy
 
-README is a landing page. Detailed derivations, design rationale, experiments, validation tables, and developer instructions belong in `docs/`.
+README is the landing page, not the manual. Derivations, scientific assumptions, validation tables, architecture rationale, and continuation notes live under `docs/`.
 
-Every public feature should eventually have:
+`STATUS.md` = current truth.
 
-- one-line README discoverability when important;
-- conceptual documentation;
-- API docstring;
-- runnable example when user-facing;
-- tests;
-- validation evidence when scientifically meaningful.
+`HANDOFF.md` = how to continue.
 
-Development-stage documents are not release-history dumps. `STATUS.md` describes current truth; `HANDOFF.md` explains how to continue; `CHANGELOG.md` records externally meaningful changes.
+`CHANGELOG.md` = externally meaningful changes.
 
-## 10. Release policy
+`VALIDATION.md` = what evidence is required before scientific claims are accepted.
 
-Pre-1.0 releases may change APIs, but changes should still be recorded in `CHANGELOG.md` and architecture decisions documented.
+## 10. Release direction
 
-Suggested progression:
+Suggested pre-1.0 progression:
 
 ```text
-0.1.x  reference CA core + common behavior/data contracts
-0.2.x  validated fire behavior + GIS workflow
-0.3.x  Cell2Fire-like reproduction/comparison
+0.1.x  CA core + behavior/data contracts + Rothermel reference
+0.2.x  GIS workflow + first behavior-informed CA
+0.3.x  FBP + Cell2Fire-like comparison
 0.4.x  richer processes + Monte Carlo
 0.5.x  profiling-led performance work
 ```
 
-The roadmap is descriptive, not a promise; scientific validation gates are more important than version numbering.
+The sequence is descriptive, not a delivery promise. Scientific validation gates take priority over version numbering.
