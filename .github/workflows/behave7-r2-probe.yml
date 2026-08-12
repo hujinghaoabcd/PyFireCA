@@ -5,6 +5,14 @@ on:
   push:
     paths:
       - ".github/workflows/behave7-r2-probe.yml"
+      - "src/pyfireca/behavior/_rothermel_base.py"
+      - "src/pyfireca/behavior/_rothermel_effects.py"
+      - "src/pyfireca/behavior/rothermel_model.py"
+      - "tests/test_rothermel_r2_base.py"
+      - "tests/test_rothermel_r3_slope.py"
+      - "tests/test_rothermel_r3_wind.py"
+      - "tests/test_rothermel_r3_wind_limit.py"
+      - "tests/test_rothermel_model.py"
 
 permissions:
   contents: read
@@ -44,7 +52,7 @@ jobs:
           path.write_text(source.replace(needle, replacement, 1))
           PY
 
-      - name: Build pinned Behave library and official testSurface
+      - name: Build pinned official testSurface
         run: |
           cmake \
             -S behave-app/behave-lib \
@@ -53,7 +61,7 @@ jobs:
             -DBEHAVE_WASM=OFF \
             -DBEHAVE_JS=OFF \
             -DBEHAVE_HTML=OFF
-          cmake --build behave-build --target behave testSurface --parallel 2
+          cmake --build behave-build --target testSurface --parallel 2
 
       - name: Verify pinned FM1 dead-only base reference
         shell: bash
@@ -62,10 +70,6 @@ jobs:
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
           1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,4.4262698923571939
           CSV
-
-          echo "Pinned Behave app commit: a3cfcd5903188d73445948af16644868225bb9d5"
-          echo "Pinned behave core commit: 29888c7ad364aa18cfb340f4c25a8e395f24260f"
-          echo "Official testSurface source is changed only to print additional precision."
           ./behave-build/testSurface fm1_zero_wind_zero_slope.csv | tee behave7_fm1_reference.log
           grep -q "Total tests passed: 1" behave7_fm1_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_reference.log
@@ -77,7 +81,6 @@ jobs:
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
           2,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,2.3810521029916596
           CSV
-
           ./behave-build/testSurface fm2_zero_wind_zero_slope.csv | tee behave7_fm2_reference.log
           grep -q "Total tests passed: 1" behave7_fm2_reference.log
           grep -q "Total tests failed: 0" behave7_fm2_reference.log
@@ -89,7 +92,6 @@ jobs:
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
           1,5.0,5.0,5.0,100.0,100.0,"Percent",30,"Percent",0,"RelativeToUpslope",0,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,20.817222076028628
           CSV
-
           ./behave-build/testSurface fm1_slope_only.csv | tee behave7_fm1_slope_reference.log
           grep -q "Total tests passed: 1" behave7_fm1_slope_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_slope_reference.log
@@ -101,107 +103,19 @@ jobs:
           fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
           1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",100,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,8.834274755440232
           CSV
-
           ./behave-build/testSurface fm1_wind_only.csv | tee behave7_fm1_wind_reference.log
           grep -q "Total tests passed: 1" behave7_fm1_wind_reference.log
           grep -q "Total tests failed: 0" behave7_fm1_wind_reference.log
 
-      - name: Add explicit wind-limit probe as an upstream-CMake target
+      - name: Verify FM1 operational wind-limit boundary reference
         shell: bash
         run: |
-          cat > behave-app/behave-lib/windLimitProbe.cpp <<'CPP'
-          #include <iomanip>
-          #include <iostream>
-          #include "behaveRun.h"
-          #include "fuelModels.h"
-
-          int main()
-          {
-              FuelModels fuelModels;
-              SpeciesMasterTable mortalitySpeciesTable;
-              BehaveRun behaveRun(fuelModels, mortalitySpeciesTable);
-
-              behaveRun.surface.updateSurfaceInputs(
-                  1,
-                  5.0,
-                  5.0,
-                  5.0,
-                  100.0,
-                  100.0,
-                  FractionUnits::Percent,
-                  1000.0,
-                  SpeedUnits::FeetPerMinute,
-                  WindHeightInputMode::DirectMidflame,
-                  0.0,
-                  WindAndSpreadOrientationMode::RelativeToUpslope,
-                  0.0,
-                  SlopeUnits::Percent,
-                  0.0,
-                  0.0,
-                  FractionUnits::Percent,
-                  0.0,
-                  LengthUnits::Feet,
-                  0.0,
-                  FractionUnits::Fraction);
-
-              behaveRun.surface.setIsWindLimitEnabled(true);
-              behaveRun.surface.doSurfaceRunInDirectionOfMaxSpread();
-
-              std::cout << std::setprecision(17)
-                        << behaveRun.surface.getSpreadRate(SpeedUnits::ChainsPerHour)
-                        << "\n";
-              return 0;
-          }
-          CPP
-
-          cat >> behave-app/behave-lib/CMakeLists.txt <<'CMAKE'
-
-          add_executable(windLimitProbe windLimitProbe.cpp)
-          target_link_libraries(windLimitProbe PRIVATE behave)
-          CMAKE
-
-          cmake \
-            -S behave-app/behave-lib \
-            -B behave-build \
-            -DTEST_BEHAVE=ON \
-            -DBEHAVE_WASM=OFF \
-            -DBEHAVE_JS=OFF \
-            -DBEHAVE_HTML=OFF
-
-      - name: Build explicit wind-limit probe
-        id: build_wind_probe
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          cmake --build behave-build --target windLimitProbe --parallel 2 2>&1 | tee wind_probe_build.log
-
-      - name: Upload wind-limit probe build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: behave-wind-limit-build-log
-          path: wind_probe_build.log
-          if-no-files-found: error
-
-      - name: Require successful wind-limit probe build
-        if: steps.build_wind_probe.outcome == 'failure'
-        run: exit 1
-
-      - name: Run explicit wind-limit probe
-        shell: bash
-        run: |
-          {
-            echo "behave_app_commit=a3cfcd5903188d73445948af16644868225bb9d5"
-            echo "behave_core_commit=29888c7ad364aa18cfb340f4c25a8e395f24260f"
-            echo "case=FM1 dead moisture 5/5/5%; slope 0%; direct-midflame wind 1000 ft/min; wind limit enabled"
-            printf "spread_rate_chains_h="
-            ./behave-build/windLimitProbe
-          } | tee behave_wind_limit_probe.txt
-
-      - name: Upload wind-limit probe result
-        uses: actions/upload-artifact@v4
-        with:
-          name: behave-wind-limit-probe
-          path: behave_wind_limit_probe.txt
-          if-no-files-found: error
+          cat > fm1_wind_limit_boundary.csv <<'CSV'
+          fuelModelNumber,moistureOneHour,moistureTenHour,moistureHundredHour,moistureLiveHerbaceous,moistureLiveWoody,moistureUnits,slope,slopeUnits,aspect,windAndSpreadOrientationMode,windSpeed,windSpeedUnits,windHeightInputMode,windDirection,canopyCover,canopyCoverUnits,canopyHeight,canopyHeightUnits,crownRatio,spreadRate
+          1,5.0,5.0,5.0,100.0,100.0,"Percent",0,"Percent",0,"RelativeToUpslope",758.3986638051593,"FeetPerMinute","DirectMidflame",0,0,"Percent",0.0,"Feet",0.0,297.3264790473483
+          CSV
+          echo "This case validates the official ROS at PyFireCA's computed wind-limit boundary."
+          echo "The optional enable/disable threshold itself is unit-tested in Python."
+          ./behave-build/testSurface fm1_wind_limit_boundary.csv | tee behave7_fm1_wind_limit_boundary.log
+          grep -q "Total tests passed: 1" behave7_fm1_wind_limit_boundary.log
+          grep -q "Total tests failed: 0" behave7_fm1_wind_limit_boundary.log
