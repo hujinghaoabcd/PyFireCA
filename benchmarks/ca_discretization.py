@@ -224,7 +224,12 @@ def _parse_args() -> argparse.Namespace:
         choices=("baseline", "heading", "cell-size"),
         default="baseline",
     )
-    parser.add_argument("--shape", type=int, default=101, help="odd square side for baseline/heading")
+    parser.add_argument(
+        "--shape",
+        type=int,
+        default=101,
+        help="odd square side for baseline/heading",
+    )
     parser.add_argument("--cell-size-m", type=float, default=30.0)
     parser.add_argument("--head-deg", type=float, default=30.0)
     parser.add_argument("--half-extent-m", type=float, default=600.0)
