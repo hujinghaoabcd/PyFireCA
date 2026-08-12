@@ -18,6 +18,7 @@ from numpy.typing import NDArray
 
 from pyfireca.neighborhood import Neighborhood, Offset, valid_neighbor_indices
 from pyfireca.propagation import square_grid_neighbor_travel_time_s
+from pyfireca.state import FireState
 
 
 class DirectionalSpreadRateProvider(Protocol):
@@ -149,3 +150,53 @@ class StaticArrivalTimeSolver:
                     heappush(queue, (candidate, target_row, target_col))
 
         return arrival
+
+
+def arrival_times_to_state(
+    domain_mask: NDArray[np.bool_],
+    arrival_times_s: NDArray[np.floating],
+    *,
+    time_s: float,
+    burn_duration_s: float,
+) -> NDArray[np.uint8]:
+    """Render canonical wildfire CA state at one physical query time.
+
+    Valid-domain cells are ``UNBURNED`` before arrival, ``BURNING`` from their
+    arrival time up to but excluding ``arrival + burn_duration``, and ``BURNED``
+    thereafter. Cells outside the domain remain ``UNBURNABLE``.
+
+    The burn duration is deliberately explicit: arrival time alone cannot
+    distinguish ``BURNING`` from ``BURNED``.
+    """
+
+    domain = np.asarray(domain_mask)
+    arrival = np.asarray(arrival_times_s, dtype=np.float64)
+    if domain.ndim != 2 or domain.dtype != np.bool_:
+        raise TypeError("domain_mask must be a two-dimensional boolean array")
+    if arrival.ndim != 2:
+        raise ValueError("arrival_times_s must be two-dimensional")
+    if arrival.shape != domain.shape:
+        raise ValueError(
+            f"arrival_times_s shape {arrival.shape} does not match domain {domain.shape}"
+        )
+    if np.isnan(arrival).any() or np.isneginf(arrival).any():
+        raise ValueError("arrival_times_s may contain finite values or +inf, not NaN/-inf")
+    finite_arrivals = np.isfinite(arrival)
+    if (arrival[finite_arrivals] < 0.0).any():
+        raise ValueError("finite arrival_times_s values must be non-negative")
+    if np.any(finite_arrivals & ~domain):
+        raise ValueError("finite arrival_times_s values must lie inside the domain")
+    if not isfinite(time_s) or time_s < 0.0:
+        raise ValueError("time_s must be finite and non-negative")
+    if not isfinite(burn_duration_s) or burn_duration_s <= 0.0:
+        raise ValueError("burn_duration_s must be finite and positive")
+
+    state = np.full(domain.shape, int(FireState.UNBURNABLE), dtype=np.uint8)
+    state[domain] = int(FireState.UNBURNED)
+
+    arrived = finite_arrivals & (arrival <= time_s)
+    burning = arrived & (time_s < arrival + burn_duration_s)
+    burned = arrived & ~burning
+    state[burning] = int(FireState.BURNING)
+    state[burned] = int(FireState.BURNED)
+    return state
