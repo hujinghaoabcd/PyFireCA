@@ -1,5 +1,6 @@
 """PyFireCA: extensible cellular automata for wildfire spread research."""
 
+from pyfireca.data import LandscapeInput
 from pyfireca.grid import RasterGrid
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
 from pyfireca.rules import NeighborIgnitionRule
@@ -8,6 +9,7 @@ from pyfireca.state import FireState
 
 __all__ = [
     "FireState",
+    "LandscapeInput",
     "MooreNeighborhood",
     "NeighborIgnitionRule",
     "RasterGrid",
