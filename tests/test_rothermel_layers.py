@@ -101,7 +101,7 @@ def test_adapter_rejects_noninteger_fuel_codes() -> None:
 
 
 def test_adapter_rejects_unaudited_fuel_code() -> None:
-    environment = _environment(fuel=((3, 1, 1),))
+    environment = _environment(fuel=((14, 1, 1),))
 
     with pytest.raises(KeyError, match="not been audited"):
         StaticRasterRothermelInputsProvider(environment, np.ones((1, 3), dtype=bool))
