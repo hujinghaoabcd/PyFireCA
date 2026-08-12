@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,7 +36,9 @@ class SpatialLayer:
     def __post_init__(self) -> None:
         self.values = np.asarray(self.values)
         if self.values.ndim not in (2, 3):
-            raise ValueError("SpatialLayer values must have shape (Y, X) or (T, Y, X)")
+            raise ValueError(
+                "SpatialLayer values must have shape (Y, X) or (T, Y, X)"
+            )
         if not np.issubdtype(self.values.dtype, np.number):
             raise TypeError("SpatialLayer values must use a numeric dtype")
         if any(size < 1 for size in self.values.shape):
@@ -105,7 +107,9 @@ class EnvironmentalData:
 
         for name, layer in self.layers.items():
             if not isinstance(name, str) or not name.strip():
-                raise ValueError("environmental layer names must be non-empty strings")
+                raise ValueError(
+                    "environmental layer names must be non-empty strings"
+                )
             if not isinstance(layer, SpatialLayer):
                 raise TypeError(f"layer {name!r} must be a SpatialLayer")
 
@@ -117,7 +121,9 @@ class EnvironmentalData:
             layer.time_size for layer in self.layers.values() if layer.is_dynamic
         }
         if len(dynamic_sizes) > 1:
-            raise ValueError("all dynamic environmental layers must share one time size")
+            raise ValueError(
+                "all dynamic environmental layers must share one time size"
+            )
 
     @property
     def spatial_shape(self) -> tuple[int, int]:
@@ -142,7 +148,10 @@ class EnvironmentalData:
             return self.layers[name]
         except KeyError as exc:
             available = ", ".join(sorted(self.layers))
-            raise KeyError(f"unknown environmental layer {name!r}; available: {available}") from exc
+            message = (
+                f"unknown environmental layer {name!r}; available: {available}"
+            )
+            raise KeyError(message) from exc
 
     def snapshot(self, time_index: int | None = None) -> dict[str, Array2D]:
         """Return aligned ``(Y, X)`` arrays for one simulation time index."""
