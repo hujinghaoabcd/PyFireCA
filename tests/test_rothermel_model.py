@@ -187,12 +187,10 @@ def test_dynamic_gr1_matches_pinned_behave_reference_after_curing_transfer() -> 
     assert result.spread_rate_m_s == pytest.approx(0.003990911424818205, rel=1e-12)
     assert result.spread_direction_deg is None
     assert result.diagnostics["dynamic_herbaceous_transfer_fraction"] == pytest.approx(0.667)
-    expected_transferred_load = (
-        lb_ft2_to_kg_m2(0.30 * TON_ACRE_TO_LB_FT2) * 0.667
+    expected_transferred_load = lb_ft2_to_kg_m2(0.30 * TON_ACRE_TO_LB_FT2) * 0.667
+    assert result.diagnostics["dynamic_herbaceous_transferred_load_kg_m2"] == pytest.approx(
+        expected_transferred_load
     )
-    assert result.diagnostics[
-        "dynamic_herbaceous_transferred_load_kg_m2"
-    ] == pytest.approx(expected_transferred_load)
 
 
 def test_model_option_and_input_types_are_checked() -> None:
