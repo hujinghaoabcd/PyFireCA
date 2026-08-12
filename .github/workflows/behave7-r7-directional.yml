@@ -1,0 +1,108 @@
+name: Behave 7 R7 directional spread regression
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/behave7-r7-directional.yml"
+      - "src/pyfireca/behavior/_surface_ellipse.py"
+      - "src/pyfireca/behavior/_units.py"
+      - "src/pyfireca/behavior/rothermel_model.py"
+      - "tests/test_surface_ellipse.py"
+      - "tests/test_rothermel_model.py"
+
+permissions:
+  contents: read
+
+jobs:
+  fm1-off-axis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pinned Behave core
+        uses: actions/checkout@v4
+        with:
+          repository: firelab/behave
+          ref: 29888c7ad364aa18cfb340f4c25a8e395f24260f
+          path: behave-core
+          persist-credentials: false
+
+      - name: Add one FM1 FromIgnitionPoint regression to official test harness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("behave-core/src/testBehave/testBehave.cpp")
+          source = path.read_text()
+          needle = '    std::cout << "Finished testing spread rate in direction of interest\\n\\n";\n'
+          insertion = r'''
+    testName = "PyFireCA pinned FM1 direct-midflame 100 ft/min, zero slope, 90 degrees from head, FromIgnitionPoint";
+    behaveRun.surface.updateSurfaceInputs(
+        1,
+        5.0,
+        5.0,
+        5.0,
+        100.0,
+        100.0,
+        FractionUnits::Percent,
+        100.0,
+        SpeedUnits::FeetPerMinute,
+        WindHeightInputMode::DirectMidflame,
+        0.0,
+        WindAndSpreadOrientationMode::RelativeToUpslope,
+        0.0,
+        SlopeUnits::Percent,
+        0.0,
+        0.0,
+        FractionUnits::Percent,
+        0.0,
+        LengthUnits::Feet,
+        0.0,
+        FractionUnits::Fraction);
+    directionOfInterest = 90.0;
+    surfaceFireSpreadDirectionMode = SurfaceFireSpreadDirectionMode::FromIgnitionPoint;
+    behaveRun.surface.doSurfaceRunInDirectionOfInterest(
+        directionOfInterest,
+        surfaceFireSpreadDirectionMode);
+    std::cout << std::setprecision(17)
+              << "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H="
+              << behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour)
+              << std::endl;
+    observedSpreadRateInDirectionOfInterest = roundToSixDecimalPlaces(
+        behaveRun.surface.getSpreadRateInDirectionOfInterest(SpeedUnits::ChainsPerHour));
+    expectedSpreadRateInDirectionOfInterest = 5.227713;
+    reportTestResult(
+        testInfo,
+        testName,
+        observedSpreadRateInDirectionOfInterest,
+        expectedSpreadRateInDirectionOfInterest,
+        error_tolerance);
+
+'''
+          if needle not in source:
+              raise SystemExit("Could not locate testDirectionOfInterest insertion point")
+          path.write_text(source.replace(needle, insertion + needle, 1))
+          PY
+
+      - name: Build pinned official testBehave target
+        run: |
+          cmake \
+            -S behave-core \
+            -B behave-build \
+            -DTEST_BEHAVE=ON \
+            -DTEST_MORTALITY=OFF \
+            -DEXAMPLE_APP=OFF
+          cmake --build behave-build --target testBehave --parallel 2
+
+      - name: Run official Behave test suite with FM1 off-axis case
+        run: |
+          ./behave-build/testBehave | tee behave7_r7_directional.log
+          grep -q "PYFIRECA_FM1_OFF_AXIS_RAW_CHAINS_H=" behave7_r7_directional.log
+          grep -q "PyFireCA pinned FM1 direct-midflame 100 ft/min" behave7_r7_directional.log
+
+      - name: Upload directional regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behave-r7-fm1-off-axis
+          path: behave7_r7_directional.log
+          if-no-files-found: error
