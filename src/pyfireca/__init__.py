@@ -12,6 +12,11 @@ from pyfireca.edge_coupling import HalfCellInterfaceDirectionalSpreadRate
 from pyfireca.grid import RasterGrid
 from pyfireca.ignition import IgnitionEvent, build_ignition_times
 from pyfireca.neighborhood import MooreNeighborhood, VonNeumannNeighborhood
+from pyfireca.outputs import (
+    StaticSimulationOutputPaths,
+    terminal_state_from_result,
+    write_static_simulation_outputs,
+)
 from pyfireca.rules import NeighborIgnitionRule
 from pyfireca.simulation import Simulation
 from pyfireca.simulator import (
@@ -33,6 +38,7 @@ __all__ = [
     "RasterGrid",
     "Simulation",
     "StaticArrivalTimeSolver",
+    "StaticSimulationOutputPaths",
     "StaticWildfireSimulationRequest",
     "StaticWildfireSimulationResult",
     "VonNeumannNeighborhood",
@@ -40,6 +46,8 @@ __all__ = [
     "build_ignition_times",
     "build_static_raster_rothermel_arrival_solver",
     "run_static_wildfire_simulation",
+    "terminal_state_from_result",
+    "write_static_simulation_outputs",
 ]
 
 __version__ = "0.1.0a0"
