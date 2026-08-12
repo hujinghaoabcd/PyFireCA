@@ -14,6 +14,7 @@ from pyfireca.behavior.rothermel import (
     RothermelFuelMoisture,
     RothermelInputs,
 )
+from pyfireca.behavior.rothermel_directional import HomogeneousRothermelDirectionalSpreadRate
 from pyfireca.behavior.rothermel_model import RothermelModel
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "FireBehaviorResult",
     "FuelClass",
     "FuelClassValues",
+    "HomogeneousRothermelDirectionalSpreadRate",
     "RothermelFuelModel",
     "RothermelFuelMoisture",
     "RothermelInputs",
